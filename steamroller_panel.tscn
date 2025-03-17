@@ -1,0 +1,58 @@
+[gd_scene format=3 uid="uid://chhwdl7xuik1r"]
+
+[node name="SteamRoller" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 6
+text = "This is SteamRoller! This tool will allow me to quickly build and deploy games to Steam.
+I need to start a checklist of features to add here.
+
+- Commit checklist. When pushing to Git, I
+   should do the following:
+   - Have a text box to enter the commit ID
+   - Run unit tests with GdUnit
+   - Change from windowed mode to full screen
+   - Build the game and save to a build folder
+   - Change back to windowed mode (or whatever I'm using).
+   - (Optional: turn on movie mode and set file destination)
+   - Play game and let dev playtest before approving commit
+   - Show staged changes
+   - Commit if everything above passes
+   - Push
+   Everything above should be optional (check boxes to turn on or off)
+
+- Save/load manager
+   Tool that lets me inspect save files and ensure that I have defaults set.
+
+- Butler and SteamPipe integration
+   - One click deploy to Itch
+   - Toggle between Demo mode and Release mode
+   - Push to Steam Depot (select based on demo or release mode)
+
+- Config options (maybe put in Project Settings?)
+   - Itch game name and Steam app ID
+   - API endpoint for bug reports
+   - URL and app ID for wishilst button
+   - Discord community link
+   - Feedback survey link
+
+- Configuration checklist (list of things I need to do before this is working)
+   - Set up Itch game name
+   - Set up Steam app ID
+   - Set URLs and endpoints"
