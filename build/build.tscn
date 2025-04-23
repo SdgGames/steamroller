@@ -1,0 +1,224 @@
+[gd_scene load_steps=3 format=3 uid="uid://dbqkoxjd0ybt0"]
+
+[ext_resource type="Script" uid="uid://fvcb1qc0k1ag" path="res://addons/steamroller/build/build.gd" id="1_bcd3x"]
+[ext_resource type="Script" uid="uid://68vodmum6tk5" path="res://addons/steamroller/build/version.gd" id="2_j4kkf"]
+
+[node name="Build" type="VBoxContainer"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -288.0
+offset_top = -470.0
+offset_right = 288.0
+offset_bottom = 470.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 2
+script = ExtResource("1_bcd3x")
+metadata/_edit_lock_ = true
+
+[node name="Label" type="RichTextLabel" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 6
+text = "This is SteamRoller! This tool will allow me to quickly build and deploy games to Steam.
+I should check these off every time I push to Git or merge a change.
+Some steps are optional (like pushing to Steam), but I should try to do as many as possible to validate that my changes are still good."
+fit_content = true
+scroll_active = false
+
+[node name="HSep" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="MessageCheckBox" type="CheckBox" parent="."]
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 6
+text = "Write a short description (and update the version if applicable)."
+
+[node name="Version" type="LineEdit" parent="."]
+layout_mode = 2
+text = "0.0.1.0"
+placeholder_text = "0.0.0.0"
+script = ExtResource("2_j4kkf")
+
+[node name="Message" type="LineEdit" parent="."]
+layout_mode = 2
+placeholder_text = "Change Description"
+emoji_menu_enabled = false
+
+[node name="HSep2" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="TestCheckBox" type="CheckBox" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 6
+text = "Run the unit tests for this change. Ensure they pass."
+
+[node name="TestButton" type="Button" parent="."]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Run all unit tests"
+
+[node name="HSep3" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="DeleteCheckBox" type="CheckBox" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 6
+text = "Delete the output of the previous build."
+
+[node name="DeleteInfo" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "Delete the previous build to ensure that no files are accidentally copied into the new release. Once this is done, go to [color=cyan]Export->Export All...[/color] to generate new demo and release builds of the game."
+fit_content = true
+scroll_active = false
+
+[node name="DeleteBuild" type="Button" parent="."]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Delete previous build"
+
+[node name="BuildCheckBox" type="CheckBox" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 6
+text = "Export the game (both the demo and the full game)."
+
+[node name="ExportInfo" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "The game builds will export to [color=CYAN]res://../builds/latest/game_depot[/color].
+The demo builds will export to [color=CYAN]res://../builds/latest/demo_depot[/color].
+The web build will export to [color=CYAN]res://../builds/latest/web[/color].
+"
+fit_content = true
+scroll_active = false
+
+[node name="HSep4" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="MovieCheckBox" type="CheckBox" parent="."]
+layout_mode = 2
+size_flags_vertical = 6
+text = "Record a gameplay sample, showcasing the latest changes."
+autowrap_mode = 2
+
+[node name="MovieInfo" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "Final file path: [color=CYAN]res://../builds/latest/gameplay_sample.mp4[/color]."
+fit_content = true
+scroll_active = false
+
+[node name="MovieButton" type="Button" parent="."]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+disabled = true
+text = "Record gameplay sample"
+
+[node name="AutoReencodeVideo" type="CheckButton" parent="."]
+layout_mode = 2
+size_flags_horizontal = 8
+button_pressed = true
+text = "Automatically reencode video to save space"
+
+[node name="HSep5" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="BuildInfo" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "The game has been exported to [color=CYAN]res://../builds/latest/[/color].
+Press [i]Archive[/i] to copy it to [color=CYAN]res://../builds/0.0.0.0_changes/[/color]"
+fit_content = true
+scroll_active = false
+
+[node name="ArchiveCheckBox" type="CheckBox" parent="."]
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 6
+text = "Archive the build and gameplay sample for easy future reference."
+
+[node name="ArchiveButton" type="Button" parent="."]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+disabled = true
+text = "Archive this build"
+
+[node name="HSep6" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="CodeReviewCheckBox" type="CheckBox" parent="."]
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 6
+text = "Do a final code review (make sure nothing weird got in the commit)"
+
+[node name="CommitLabel" type="RichTextLabel" parent="."]
+layout_mode = 2
+size_flags_vertical = 6
+bbcode_enabled = true
+text = "Make sure that all relevant changes are staged ([i]including project settings and [b]Version Info[/b] if the version number changed[/i]), then commit and push. Cloud builds will run automatically."
+fit_content = true
+scroll_active = false
+
+[node name="CommitCommand" type="RichTextLabel" parent="."]
+layout_mode = 2
+size_flags_vertical = 6
+bbcode_enabled = true
+text = "[center]git commit -m [color=cyan]\"fixes\"[/color][/center]"
+fit_content = true
+scroll_active = false
+
+[node name="CopyMessage" type="Button" parent="."]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+disabled = true
+text = "Copy to clipboard"
+
+[node name="ThatsAll" type="RichTextLabel" parent="."]
+layout_mode = 2
+size_flags_vertical = 6
+text = "Done! Your code is in the cloud, and you have a game export if you need to look back. Press the next button to reset the checklist for next time.
+If you want to push your builds to the cloud, switch to the Release tab."
+fit_content = true
+scroll_active = false
+
+[node name="ResetFields" type="Button" parent="."]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Reset all fields for the next commit"
+
+[node name="AutoIncrementVersion" type="CheckButton" parent="."]
+layout_mode = 2
+size_flags_horizontal = 8
+button_pressed = true
+text = "Automatically increment version number on reset"
+
+[connection signal="pressed" from="MessageCheckBox" to="." method="_on_check_box_pressed"]
+[connection signal="text_changed" from="Message" to="." method="_on_message_text_changed"]
+[connection signal="pressed" from="TestCheckBox" to="." method="_on_check_box_pressed"]
+[connection signal="pressed" from="TestButton" to="." method="_on_test_button_pressed"]
+[connection signal="pressed" from="DeleteCheckBox" to="." method="_on_check_box_pressed"]
+[connection signal="pressed" from="DeleteBuild" to="." method="_on_delete_build_pressed"]
+[connection signal="pressed" from="BuildCheckBox" to="." method="_on_check_box_pressed"]
+[connection signal="pressed" from="MovieCheckBox" to="." method="_on_check_box_pressed"]
+[connection signal="pressed" from="MovieButton" to="." method="_on_movie_button_pressed"]
+[connection signal="pressed" from="ArchiveCheckBox" to="." method="_on_check_box_pressed"]
+[connection signal="pressed" from="ArchiveButton" to="." method="_on_archive_button_pressed"]
+[connection signal="pressed" from="CodeReviewCheckBox" to="." method="_on_check_box_pressed"]
+[connection signal="pressed" from="CopyMessage" to="." method="_on_copy_message_pressed"]
+[connection signal="pressed" from="ResetFields" to="." method="_on_reset_fields_pressed"]
