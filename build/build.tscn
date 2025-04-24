@@ -26,7 +26,9 @@ size_flags_horizontal = 3
 size_flags_vertical = 6
 text = "This is SteamRoller! This tool will allow me to quickly build and deploy games to Steam.
 I should check these off every time I push to Git or merge a change.
-Some steps are optional (like pushing to Steam), but I should try to do as many as possible to validate that my changes are still good."
+Some steps are optional (like pushing to Steam), but I should try to do as many as possible to validate that my changes are still good.
+
+Note: Buttons will be disabled until previous steps are completed. Press the check-box to skip a step - subsequent actions will unlock."
 fit_content = true
 scroll_active = false
 
@@ -41,7 +43,7 @@ text = "Write a short description (and update the version if applicable)."
 
 [node name="Version" type="LineEdit" parent="."]
 layout_mode = 2
-text = "0.0.1.0"
+text = "0.0.1.2"
 placeholder_text = "0.0.0.0"
 script = ExtResource("2_j4kkf")
 
@@ -188,6 +190,9 @@ size_flags_horizontal = 4
 disabled = true
 text = "Copy to clipboard"
 
+[node name="HSep7" type="HSeparator" parent="."]
+layout_mode = 2
+
 [node name="ThatsAll" type="RichTextLabel" parent="."]
 layout_mode = 2
 size_flags_vertical = 6
@@ -195,6 +200,19 @@ text = "Done! Your code is in the cloud, and you have a game export if you need 
 If you want to push your builds to the cloud, switch to the Release tab."
 fit_content = true
 scroll_active = false
+
+[node name="ReleaseButton" type="Button" parent="."]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Go to Release Checklist
+"
+
+[node name="ThatsAll2" type="Label" parent="."]
+layout_mode = 2
+size_flags_vertical = 6
+text = "-- or --"
+horizontal_alignment = 1
 
 [node name="ResetFields" type="Button" parent="."]
 custom_minimum_size = Vector2(320, 0)
@@ -207,6 +225,13 @@ layout_mode = 2
 size_flags_horizontal = 8
 button_pressed = true
 text = "Automatically increment version number on reset"
+
+[node name="HSep9" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="."]
+custom_minimum_size = Vector2(0, 256)
+layout_mode = 2
 
 [connection signal="pressed" from="MessageCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="text_changed" from="Message" to="." method="_on_message_text_changed"]
@@ -221,4 +246,5 @@ text = "Automatically increment version number on reset"
 [connection signal="pressed" from="ArchiveButton" to="." method="_on_archive_button_pressed"]
 [connection signal="pressed" from="CodeReviewCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="pressed" from="CopyMessage" to="." method="_on_copy_message_pressed"]
+[connection signal="pressed" from="ReleaseButton" to="." method="_on_release_button_pressed"]
 [connection signal="pressed" from="ResetFields" to="." method="_on_reset_fields_pressed"]

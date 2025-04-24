@@ -1,6 +1,9 @@
 @tool
 extends VBoxContainer
 
+signal to_release
+signal description_modified(description: String)
+
 @export var commit_file_name: String
 
 @onready var version: LineEdit = $Version
@@ -225,7 +228,6 @@ func reset_buttons():
 
 ## Disables and enables build steps based on previously completed steps.
 func toggle_button_disabled() -> void:
-	print("Check Box")
 	test_button.disabled = !message_check_box.button_pressed or test_check_box.button_pressed
 	delete_build.disabled = !message_check_box.button_pressed or delete_check_box.button_pressed
 	movie_button.disabled = !message_check_box.button_pressed or movie_check_box.button_pressed
@@ -233,8 +235,29 @@ func toggle_button_disabled() -> void:
 	copy_message.disabled = !(build_check_box.button_pressed and movie_check_box.button_pressed and code_review_check_box.button_pressed)
 
 
+## Clears the commit message, resets all button states,
+## and increments the version number (if option is checked).
+func reset():
+	message.clear()
+	reset_buttons()
+	if auto_increment_version.button_pressed:
+		# Find the position of the last dot
+		var last_dot_pos = version.text.rfind(".")
+		# Get everything before the last dot (including the dot)
+		var prefix = version.text.substr(0, last_dot_pos + 1)
+		# Get the last digit as a string
+		var last_digit = version.text.substr(last_dot_pos + 1)
+		# Convert to int, increment, and convert back to string
+		var incremented = str(int(last_digit) + 1)
+		# Combine and return the new version
+		version.text = prefix + incremented
+		# We don't actually call this on change? Make it explicit.
+		version._on_text_changed(version.text)
+
+
 func _on_message_text_changed(new_text: String) -> void:
 	# Make sure that we don't include spaces on accident.
+	description_modified.emit(new_text)
 	commit_file_name = version.text + "_" + new_text.replace(" ", "_").to_lower()
 	reset_buttons()
 	message_check_box.button_pressed = true
@@ -282,17 +305,9 @@ func _on_check_box_pressed() -> void:
 	toggle_button_disabled()
 
 
+func _on_release_button_pressed() -> void:
+	to_release.emit()
+
+
 func _on_reset_fields_pressed() -> void:
-	message.clear()
-	reset_buttons()
-	if auto_increment_version.button_pressed:
-		# Find the position of the last dot
-		var last_dot_pos = version.text.rfind(".")
-		# Get everything before the last dot (including the dot)
-		var prefix = version.text.substr(0, last_dot_pos + 1)
-		# Get the last digit as a string
-		var last_digit = version.text.substr(last_dot_pos + 1)
-		# Convert to int, increment, and convert back to string
-		var incremented = str(int(last_digit) + 1)
-		# Combine and return the new version
-		version.text = prefix + incremented
+	reset()

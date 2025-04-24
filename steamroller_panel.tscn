@@ -1,9 +1,9 @@
 [gd_scene load_steps=5 format=3 uid="uid://chhwdl7xuik1r"]
 
-[ext_resource type="Texture2D" uid="uid://bc3bfdx0f2nx" path="res://addons/steamroller/docs/download_sdk.png" id="1_awct5"]
 [ext_resource type="Script" uid="uid://byfu8d8gdlgms" path="res://addons/steamroller/steamroller_panel.gd" id="1_m3gm2"]
 [ext_resource type="PackedScene" uid="uid://dbqkoxjd0ybt0" path="res://addons/steamroller/build/build.tscn" id="2_tmjlb"]
-[ext_resource type="Script" uid="uid://68vodmum6tk5" path="res://addons/steamroller/build/version.gd" id="3_tmjlb"]
+[ext_resource type="PackedScene" uid="uid://ci0h8yey72wi2" path="res://addons/steamroller/release/release.tscn" id="3_tmjlb"]
+[ext_resource type="PackedScene" uid="uid://bqi20akqnyuja" path="res://addons/steamroller/docs/instructions.tscn" id="4_tmjlb"]
 
 [node name="SteamRoller" type="Control"]
 layout_mode = 3
@@ -38,159 +38,17 @@ layout_mode = 2
 metadata/_edit_lock_ = true
 metadata/_tab_index = 1
 
-[node name="Release" type="VBoxContainer" parent="TabContainer/Release"]
+[node name="Release" parent="TabContainer/Release" instance=ExtResource("3_tmjlb")]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 2
-metadata/_edit_lock_ = true
 
-[node name="Label" type="Label" parent="TabContainer/Release/Release"]
-layout_mode = 2
-size_flags_horizontal = 2
-size_flags_vertical = 6
-text = "This is SteamRoller! This tool will allow me to quickly build and deploy games to Steam.
-I will continue to automate things as I go. For now, here is a manual checklist
-for each push, and another for each merge or release.
-I should check off each of these every time I push to Git or merge to main."
-
-[node name="ReleaseList" type="Label" parent="TabContainer/Release/Release"]
-layout_mode = 2
-size_flags_horizontal = 2
-size_flags_vertical = 6
-text = "
-Merge/Release Checklist (TODO: Automate)"
-
-[node name="ReleaseList1" type="CheckBox" parent="TabContainer/Release/Release"]
-layout_mode = 2
-text = "Change the version number, both in the project and VersionInfo.yml"
-
-[node name="Version" type="LineEdit" parent="TabContainer/Release/Release"]
-layout_mode = 2
-text = "0.0.1.0"
-placeholder_text = "0.0.0.0"
-script = ExtResource("3_tmjlb")
-
-[node name="ReleaseList2" type="CheckBox" parent="TabContainer/Release/Release"]
-layout_mode = 2
-text = "Export all builds (go through push checklist if I haven't already)"
-
-[node name="ReleaseList3" type="CheckBox" parent="TabContainer/Release/Release"]
-layout_mode = 2
-text = "Deploy to Itch via Butler script - demo build (and maybe release)"
-
-[node name="ReleaseList4" type="CheckBox" parent="TabContainer/Release/Release"]
-layout_mode = 2
-text = "Deploy demo and release builds to Steam with SteamPipe"
-
-[node name="ReleaseList5" type="CheckBox" parent="TabContainer/Release/Release"]
-layout_mode = 2
-text = "Merge code in Gitlab."
-
-[node name="ReleaseList6" type="CheckBox" parent="TabContainer/Release/Release"]
-layout_mode = 2
-text = "Create a release in the CI pipeline"
-
-[node name="Installation Instructions" type="ScrollContainer" parent="TabContainer"]
+[node name="Start Guide" type="ScrollContainer" parent="TabContainer"]
 visible = false
 layout_mode = 2
 metadata/_edit_lock_ = true
 metadata/_tab_index = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/Installation Instructions"]
+[node name="Instructions" parent="TabContainer/Start Guide" instance=ExtResource("4_tmjlb")]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 2
-metadata/_edit_lock_ = true
-
-[node name="Label" type="RichTextLabel" parent="TabContainer/Installation Instructions/VBoxContainer"]
-custom_minimum_size = Vector2(670, 0)
-layout_mode = 2
-size_flags_vertical = 6
-text = "This is SteamRoller! This tool will allow me to quickly build and deploy games to Steam.
-I will continue to automate things as I go. For now, here is a manual checklist
-for each push, and another for each merge or release.
-I should check off each of these every time I push to Git or merge to main.
-"
-fit_content = true
-scroll_active = false
-autowrap_mode = 2
-
-[node name="Requirements" type="RichTextLabel" parent="TabContainer/Installation Instructions/VBoxContainer"]
-layout_mode = 2
-bbcode_enabled = true
-text = "[b]Plugin Dependencies[/b]"
-fit_content = true
-
-[node name="Requirements1" type="RichTextLabel" parent="TabContainer/Installation Instructions/VBoxContainer"]
-custom_minimum_size = Vector2(670, 0)
-layout_mode = 2
-size_flags_vertical = 6
-bbcode_enabled = true
-text = "This tool is a core component of my Godot Base Game Template.
-As such, it has multiple dependencies. Using it without these tools installed will cause unexpected errors.
-[b]Godot addons[/b]
-	- gdUnit4 (for Unit testing)
-	- godotsteam (for Steam integration)
-[b]Installed programs[/b]
-	- Steamworks SDK (see below)
-	- rcedit (Godot export requirement)
-	- ffmpeg (for re-encoding gameplay samples)
-	- git (version control)
-"
-fit_content = true
-scroll_active = false
-autowrap_mode = 2
-
-[node name="GuideStart" type="RichTextLabel" parent="TabContainer/Installation Instructions/VBoxContainer"]
-layout_mode = 2
-bbcode_enabled = true
-text = "[b]Getting Started Guide[/b]"
-fit_content = true
-
-[node name="Installing1" type="RichTextLabel" parent="TabContainer/Installation Instructions/VBoxContainer"]
-custom_minimum_size = Vector2(600, 0)
-layout_mode = 2
-text = "This project is designed to make building and deploying to Steam as effortless as possible, but a little setup is still required. The Steamworks SDK can't be included in this project for legal reasons, so you will have to download it yourself. Go to your Steam dashboard to download the sdk."
-fit_content = true
-scroll_active = false
-
-[node name="DashboardLink" type="LinkButton" parent="TabContainer/Installation Instructions/VBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 4
-text = "Open my Steamworks Dashboard"
-uri = "https://partner.steamgames.com/dashboard"
-
-[node name="TextureRect" type="TextureRect" parent="TabContainer/Installation Instructions/VBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 4
-texture = ExtResource("1_awct5")
-stretch_mode = 2
-
-[node name="Installing2" type="RichTextLabel" parent="TabContainer/Installation Instructions/VBoxContainer"]
-custom_minimum_size = Vector2(600, 0)
-layout_mode = 2
-text = "You can check the Placeholder.md file if you need more help installing Steamworks.
-
-Next, we will need to set up the Steam bucket so we can push our builds to the cloud. We will need two numbers: an App ID and a Depot ID. For more details on how to set these up, check out Steam's official documentation."
-fit_content = true
-scroll_active = false
-
-[node name="NewAppDocsLink" type="LinkButton" parent="TabContainer/Installation Instructions/VBoxContainer"]
-layout_mode = 2
-text = "Setup Guide (Steam Docs)"
-uri = "https://partner.steamgames.com/doc/sdk/uploading#Initial_Setup_New_App"
-
-[node name="Installing3" type="RichTextLabel" parent="TabContainer/Installation Instructions/VBoxContainer"]
-custom_minimum_size = Vector2(600, 0)
-layout_mode = 2
-bbcode_enabled = true
-text = "SteamRoller will use a single depot with a shared pack file. This means that you should only create one depot for the game, and one depot for the demo (if applicable). Windows users will get the Linux files, and vice-versa, but these files are quite small, and it is much easier to manage. Your launch options should look like so:
-
-[b]TODO: Include a screenshot of the proper launch options for the Godot executable.[/b]
-
-I need to finish this part of the plugin - I need to set up this game to export properly, and then I will need to connect each step to the plugin so I can reliably build and push to Steam."
-fit_content = true
-scroll_active = false
 
 [node name="Dev Notes (TODO)" type="ScrollContainer" parent="TabContainer"]
 visible = false
@@ -230,3 +88,7 @@ Extra tools I want to develop.
    - Set up Itch game name
    - Set up Steam app ID
    - Set URLs and endpoints"
+
+[connection signal="description_modified" from="TabContainer/Build/Build" to="." method="_on_build_description_modified"]
+[connection signal="to_release" from="TabContainer/Build/Build" to="." method="_on_build_to_release"]
+[connection signal="reset_build" from="TabContainer/Release/Release" to="." method="_on_release_reset_build"]

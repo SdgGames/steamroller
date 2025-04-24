@@ -1,0 +1,149 @@
+[gd_scene load_steps=3 format=3 uid="uid://ci0h8yey72wi2"]
+
+[ext_resource type="Script" uid="uid://68vodmum6tk5" path="res://addons/steamroller/build/version.gd" id="1_xvjpl"]
+[ext_resource type="Script" uid="uid://cm7p0nlx54hk4" path="res://addons/steamroller/release/release.gd" id="1_ygwi4"]
+
+[node name="Release" type="VBoxContainer"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -277.0
+offset_right = 277.0
+offset_bottom = 478.0
+grow_horizontal = 2
+size_flags_horizontal = 3
+size_flags_vertical = 2
+script = ExtResource("1_ygwi4")
+metadata/_edit_lock_ = true
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 2
+size_flags_vertical = 6
+text = "TODO: Continue to work on the  release checklist.
+For now, the button runs a script to push the four game builds
+to two depots (demo and release)."
+
+[node name="HSep" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="ReleaseList" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 2
+size_flags_vertical = 6
+text = "Merge/Release Checklist (TODO: Automate)"
+
+[node name="ReleaseList1" type="CheckBox" parent="."]
+layout_mode = 2
+text = "Go through all steps in the Build tab"
+
+[node name="HSep2" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="RichTextLabel" type="RichTextLabel" parent="."]
+layout_mode = 2
+text = "This is the version number of the current build:"
+fit_content = true
+scroll_active = false
+
+[node name="Version" type="LineEdit" parent="."]
+layout_mode = 2
+text = "0.0.1.1"
+placeholder_text = "Version"
+script = ExtResource("1_xvjpl")
+
+[node name="HSep3" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="ReleaseList2" type="CheckBox" parent="."]
+layout_mode = 2
+text = "Update the build description in the VDF file"
+
+[node name="VdfLabel" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "TODO: Automate VDF generation. For now, you need to go to [code]steamworks_sdk\\tools\\ContentBuilder\\scripts[/code] and update the [color=cyan]desc[/color] field of the app files to match the change description from the Build tab.
+Also, the Itch buttons don't work yet. Cloud builds still work, but require a merge to Main first."
+fit_content = true
+scroll_active = false
+
+[node name="BuildDesc" type="LineEdit" parent="."]
+layout_mode = 2
+placeholder_text = "Steam Build Description"
+
+[node name="ReleaseList3" type="CheckBox" parent="."]
+layout_mode = 2
+text = "Play the exported game executable to verify its integrity"
+
+[node name="ReleaseList4" type="CheckBox" parent="."]
+layout_mode = 2
+text = "Push your changes to Steam and/or Itch"
+
+[node name="GridContainer" type="GridContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+columns = 2
+
+[node name="PushDemoSteam" type="Button" parent="GridContainer"]
+layout_mode = 2
+text = "Push Demo to Steam"
+
+[node name="PushGameSteam" type="Button" parent="GridContainer"]
+layout_mode = 2
+text = "Push Game to Steam"
+
+[node name="PushDemoItch" type="Button" parent="GridContainer"]
+layout_mode = 2
+text = "Push Demo to Itch"
+
+[node name="PushGameItch" type="Button" parent="GridContainer"]
+layout_mode = 2
+text = "Push Game to Itch"
+
+[node name="PushAll" type="Button" parent="."]
+layout_mode = 2
+text = "Push All"
+
+[node name="ConsoleOutput" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "[center]Build and push output displayed here:"
+fit_content = true
+scroll_active = false
+
+[node name="HSep4" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="ReleaseList5" type="CheckBox" parent="."]
+layout_mode = 2
+text = "Merge code in Gitlab."
+
+[node name="ReleaseList6" type="CheckBox" parent="."]
+layout_mode = 2
+text = "Create a release in the CI pipeline"
+
+[node name="HSep5" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="ReturnDesc" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "Your build is live! Press this button to go back to the build menu. This will increment the version number (if selected), and will clear all checklist steps."
+fit_content = true
+scroll_active = false
+
+[node name="ResetButton" type="Button" parent="."]
+layout_mode = 2
+text = "Reset and return to the build menu"
+
+[node name="Spacer" type="Control" parent="."]
+custom_minimum_size = Vector2(0, 256)
+layout_mode = 2
+
+[connection signal="pressed" from="GridContainer/PushDemoSteam" to="." method="_on_push_demo_steam_pressed"]
+[connection signal="pressed" from="GridContainer/PushGameSteam" to="." method="_on_push_game_steam_pressed"]
+[connection signal="pressed" from="GridContainer/PushDemoItch" to="." method="_on_push_demo_itch_pressed"]
+[connection signal="pressed" from="GridContainer/PushGameItch" to="." method="_on_push_game_itch_pressed"]
+[connection signal="pressed" from="PushAll" to="." method="_on_push_all_pressed"]
+[connection signal="pressed" from="ResetButton" to="." method="_on_reset_button_pressed"]

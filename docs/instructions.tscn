@@ -1,0 +1,142 @@
+[gd_scene load_steps=4 format=3 uid="uid://bqi20akqnyuja"]
+
+[ext_resource type="Texture2D" uid="uid://bc3bfdx0f2nx" path="res://addons/steamroller/docs/download_sdk.png" id="1_lyjad"]
+[ext_resource type="Texture2D" uid="uid://butilqr7lp3ky" path="res://addons/steamroller/docs/creating_branches.png" id="2_vimpl"]
+[ext_resource type="Texture2D" uid="uid://bsrr5vixolw71" path="res://addons/steamroller/docs/launch_options.png" id="3_vimpl"]
+
+[node name="Instructions" type="VBoxContainer"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 4402.0
+grow_horizontal = 2
+size_flags_horizontal = 3
+size_flags_vertical = 2
+metadata/_edit_lock_ = true
+
+[node name="Requirements" type="RichTextLabel" parent="."]
+layout_mode = 2
+size_flags_vertical = 6
+bbcode_enabled = true
+text = "[b]Welcome to SteamRoller! This is a Godot addon to automate all build and push steps for a Steam game.[/b]
+The following guide will walk you through the basic steps of pusing this game to a new Steam application page. Let's start with basic dependencies and work up to a full release.
+
+[b]Plugin Dependencies[/b]
+This tool is a core component of my Godot Base Game Template.
+As such, it has multiple dependencies. Using it without these tools installed will cause unexpected errors.
+[b]Godot addons[/b]
+	- gdUnit4 (for Unit testing)
+	- godotsteam (for Steam integration)
+[b]Installed programs[/b]
+	- Steamworks SDK (see below)
+	- rcedit (Godot export requirement)
+	- ffmpeg (for re-encoding gameplay samples)
+	- git (version control)
+"
+fit_content = true
+scroll_active = false
+autowrap_mode = 2
+
+[node name="HSep" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="Installing1" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "[b]Getting Started Guide - Installation[/b]
+This project is designed to make building and deploying to Steam as effortless as possible, but a little setup is still required. The Steamworks SDK can't be included in this project for legal reasons, so you will have to download it yourself. Go to your Steam dashboard to download the sdk."
+fit_content = true
+scroll_active = false
+
+[node name="DashboardLink" type="LinkButton" parent="."]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Open my Steamworks Dashboard"
+uri = "https://partner.steamgames.com/dashboard"
+
+[node name="TextureRect" type="TextureRect" parent="."]
+layout_mode = 2
+size_flags_horizontal = 4
+texture = ExtResource("1_lyjad")
+stretch_mode = 2
+
+[node name="Installing2" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "You can check the Placeholder.md file if you need more help installing Steamworks."
+fit_content = true
+scroll_active = false
+
+[node name="HSep2" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="Installing3" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "[b]Getting Started Guide - Pushing for the first time[/b]
+Next, we will need to set up the Steam bucket so we can push our builds to the cloud. We will need two numbers: an App ID and a Depot ID. For more details on how to set these up, check out Steam's official documentation."
+fit_content = true
+scroll_active = false
+
+[node name="NewAppDocsLink" type="LinkButton" parent="."]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Setup Guide (Steam Docs)"
+uri = "https://partner.steamgames.com/doc/sdk/uploading#Initial_Setup_New_App"
+
+[node name="Installing4" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "SteamRoller will use a single depot with a shared pack file. This means that you should only create one depot for the game, and one depot for the demo (if applicable). Windows users will get the Linux files, and vice-versa, but these files are quite small, and it is much easier to manage.
+
+Before we build and push for the first time, open up [color=cyan]Project->Export[/color] in Godot and update the executable name. Don't change the path - the [color=cyan]latest[/color] folder name is hard-coded in the plugin. Just replace [color=cyan]game.exe[/color] with [color=cyan]GameOfTheYear.exe[/color] for all five of the export options. If you forgot, now's a great time to update the game name in [color=cyan]Project Settings[/color] as well!
+
+[color=red]TODO: Right now, you will need to generate the VDF files manually. Once everything is set up, you can push with the release button on the Release tab. Steam provides a GUI - use that tool to generate the app and depot files. This will be replaced with a tool to generate and maintain VDF files from the Release tab directly.[/color]
+
+Now that you have your IDs provided, press the button on the Release tab to push your game and/or demo to Steam.
+
+The first push to Steam will succeed, but the console output will report a failure. This is because the [color=cyan]beta[/color] branch does not exist yet. To fix this, you first need to set one build to the default branch. Go to [color=cyan]SteamPipe->Builds[/color]"
+fit_content = true
+scroll_active = false
+
+[node name="TextureRect2" type="TextureRect" parent="."]
+layout_mode = 2
+texture = ExtResource("2_vimpl")
+expand_mode = 5
+
+[node name="Installing5" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "To create a new branch, do the following:
+
+[color=cyan]	1. [/color] Pick a build, and set it to the default app branch. Click [color=cyan]Preview Change[/color], then confirm.
+[color=cyan]	2. [/color] You should now see the build live on the default branch.
+[color=cyan]	3. [/color] There should be a new button available. Press it to create the [color=cyan]beta[/color] branch (or pick a different name)
+
+A beta branch will allow you to push changes to the cloud and immediately test them without visiting the dashboard. You can create new branches to give players access to old builds, or even run betas and tests with specific branches. By default, we will have one branch automatically assigned.
+
+Once you create a new branch, you should be able to push your changes to it without errors. Your game is in the cloud - but if you try to install it, you will get an error. Go to [color=cyan]Installation->General Installation[/color] to fix this."
+fit_content = true
+scroll_active = false
+
+[node name="TextureRect3" type="TextureRect" parent="."]
+layout_mode = 2
+texture = ExtResource("3_vimpl")
+expand_mode = 5
+
+[node name="Installing6" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "You need to create both launch options - one for Windows and one for Linux. You may want to open the [color=cyan]builds\\latest\\game_depot[/color] folder to verify that the names match your expectations. After updating the launch options, go to the [color=cyan]Publish[/color] tab and make sure that your changes are all live.
+
+Once this is done, open up the Steam client, go to your Library, and install the game. It should launch without errors. Congradulations!
+
+[b]Getting Started Guide - Pushing for the second time[/b]
+Now that everything is working, pushing new builds is easy. Just go through the [color=cyan]Build[/color] tab checklist to create a game executable and verify changes. Then, go through the [color=cyan]Release[/color] checklist. When you press the Push button (for one build, or all of them), your game executable will be sent to Steam.
+
+If you want to play this latest version without having to open your dashboard, then you should make sure that you are playing the [color=cyan]beta[/color] branch instead of [color=cyan]default[/color]. Steam doesn't always patch the game immediately, so you might need to exit the client and restart it to get an update."
+fit_content = true
+scroll_active = false
+
+[node name="Control" type="Control" parent="."]
+custom_minimum_size = Vector2(0, 256)
+layout_mode = 2
