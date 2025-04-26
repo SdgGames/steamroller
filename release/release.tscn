@@ -33,7 +33,7 @@ size_flags_horizontal = 2
 size_flags_vertical = 6
 text = "Merge/Release Checklist (TODO: Automate)"
 
-[node name="ReleaseList1" type="CheckBox" parent="."]
+[node name="BuildCompleteCheckBox" type="CheckBox" parent="."]
 layout_mode = 2
 text = "Go through all steps in the Build tab"
 
@@ -87,22 +87,27 @@ columns = 2
 
 [node name="PushDemoSteam" type="Button" parent="GridContainer"]
 layout_mode = 2
+disabled = true
 text = "Push Demo to Steam"
 
 [node name="PushGameSteam" type="Button" parent="GridContainer"]
 layout_mode = 2
+disabled = true
 text = "Push Game to Steam"
 
 [node name="PushDemoItch" type="Button" parent="GridContainer"]
 layout_mode = 2
+disabled = true
 text = "Push Demo to Itch"
 
 [node name="PushGameItch" type="Button" parent="GridContainer"]
 layout_mode = 2
+disabled = true
 text = "Push Game to Itch"
 
 [node name="PushAll" type="Button" parent="."]
 layout_mode = 2
+disabled = true
 text = "Push All"
 
 [node name="ConsoleOutput" type="RichTextLabel" parent="."]
@@ -141,6 +146,7 @@ text = "Reset and return to the build menu"
 custom_minimum_size = Vector2(0, 256)
 layout_mode = 2
 
+[connection signal="pressed" from="BuildCompleteCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="pressed" from="GridContainer/PushDemoSteam" to="." method="_on_push_demo_steam_pressed"]
 [connection signal="pressed" from="GridContainer/PushGameSteam" to="." method="_on_push_game_steam_pressed"]
 [connection signal="pressed" from="GridContainer/PushDemoItch" to="." method="_on_push_demo_itch_pressed"]

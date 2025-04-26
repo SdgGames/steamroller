@@ -20,9 +20,24 @@ const STEAM_CMD_PATH = "/tools/ContentBuilder/builder/steamcmd.exe"
 ## A reference to the release tab. I should run this before merging a branch to to Main in git.
 @onready var release_tab: ScrollContainer = $TabContainer/Release
 @onready var release: VBoxContainer = $TabContainer/Release/Release
+## The version and demo status of the game.
+@onready var game_version: Label = $Header/GameVersion
+@onready var demo_toggle: CheckButton = $Header/DemoToggle
+
+
+func _ready() -> void:
+	add_to_group("settings_sync")
+	update_settings()
+
+
+# Update the version info at the top of the panel.
+func update_settings():
+	demo_toggle.button_pressed = GameVersion.is_demo_mode()
+	game_version.text = GameVersion.get_application_name() + " " + GameVersion.get_version_string()
 
 
 func _on_build_to_release() -> void:
+	release.build_complete()
 	release_tab.visible = true
 	release_tab.scroll_vertical = 0
 
@@ -35,3 +50,8 @@ func _on_release_reset_build() -> void:
 
 func _on_build_description_modified(description: String) -> void:
 	release.update_build_description(description)
+
+
+func _on_demo_toggle_toggled(toggled_on: bool) -> void:
+	GameVersion.set_demo_mode(toggled_on)
+	get_tree().call_group("settings_sync", "update_settings")

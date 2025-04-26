@@ -88,6 +88,8 @@ layout_mode = 2
 bbcode_enabled = true
 text = "SteamRoller will use a single depot with a shared pack file. This means that you should only create one depot for the game, and one depot for the demo (if applicable). Windows users will get the Linux files, and vice-versa, but these files are quite small, and it is much easier to manage.
 
+These IDs will be stored in  [color=cyan]Project Settings[/color] under [color=cyan]Application->SteamRoller[/color]. Set all four (game and demo app and depot IDs). The [color=cyan]demo_mode[/color]  flag is for editor use only, so don't worry about it too much.
+
 Before we build and push for the first time, open up [color=cyan]Project->Export[/color] in Godot and update the executable name. Don't change the path - the [color=cyan]latest[/color] folder name is hard-coded in the plugin. Just replace [color=cyan]game.exe[/color] with [color=cyan]GameOfTheYear.exe[/color] for all five of the export options. If you forgot, now's a great time to update the game name in [color=cyan]Project Settings[/color] as well!
 
 [color=red]TODO: Right now, you will need to generate the VDF files manually. Once everything is set up, you can push with the release button on the Release tab. Steam provides a GUI - use that tool to generate the app and depot files. This will be replaced with a tool to generate and maintain VDF files from the Release tab directly.[/color]

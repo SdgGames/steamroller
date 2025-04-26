@@ -6,9 +6,28 @@ signal reset_build
 @onready var build_desc: LineEdit = $BuildDesc
 @onready var version: LineEdit = $Version
 
+@onready var build_complete_check_box: CheckBox = $BuildCompleteCheckBox
+@onready var push_buttons = [
+		$GridContainer/PushDemoSteam,
+		$GridContainer/PushGameSteam,
+		$GridContainer/PushDemoItch,
+		$GridContainer/PushGameItch,
+		$PushAll,
+	]
+
+
+func _ready() -> void:
+	# Set the initial state.
+	toggle_buttons_disabled()
+
 
 func update_build_description(base_message: String):
 	build_desc.text = "(%s) %s" % [version.text, base_message]
+
+
+func build_complete():
+	build_complete_check_box.button_pressed = true
+	toggle_buttons_disabled()
 
 
 func push_to_steam(app_id: String):
@@ -20,6 +39,11 @@ func push_to_steam(app_id: String):
 		print("Success!")
 	else:
 		print(output)
+
+
+func toggle_buttons_disabled():
+	for button in push_buttons:
+		button.disabled = !build_complete_check_box.button_pressed
 
 
 func _on_push_demo_steam_pressed() -> void:
@@ -45,4 +69,10 @@ func _on_push_all_pressed() -> void:
 
 
 func _on_reset_button_pressed() -> void:
+	build_complete_check_box.button_pressed = false
+	toggle_buttons_disabled()
 	reset_build.emit()
+
+
+func _on_check_box_pressed() -> void:
+	toggle_buttons_disabled()
