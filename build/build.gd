@@ -73,6 +73,7 @@ func record_gameplay() -> bool:
 	
 	# Run ffmpeg to compress the video. Mark task complete if it succeeds.
 	if auto_reencode_video.button_pressed:
+		movie_button.text = "Re-encoding video"
 		if await reencode_gameplay_video(movie_path):
 			return true
 	else:
@@ -228,9 +229,9 @@ func reset_buttons():
 
 ## Disables and enables build steps based on previously completed steps.
 func toggle_button_disabled() -> void:
+	delete_build.disabled = delete_check_box.button_pressed
+	movie_button.disabled = movie_check_box.button_pressed and delete_check_box.button_pressed
 	test_button.disabled = !message_check_box.button_pressed or test_check_box.button_pressed
-	delete_build.disabled = !message_check_box.button_pressed or delete_check_box.button_pressed
-	movie_button.disabled = !message_check_box.button_pressed or movie_check_box.button_pressed
 	archive_button.disabled = (!(build_check_box.button_pressed and movie_check_box.button_pressed) or archive_check_box.button_pressed)
 	copy_message.disabled = !(build_check_box.button_pressed and movie_check_box.button_pressed and code_review_check_box.button_pressed)
 
@@ -311,3 +312,7 @@ func _on_release_button_pressed() -> void:
 
 func _on_reset_fields_pressed() -> void:
 	reset()
+
+
+func _on_open_build_button_pressed() -> void:
+	OS.shell_show_in_file_manager(ProjectSettings.globalize_path(SteamRoller.LATEST_BUILD_BASE_PATH))

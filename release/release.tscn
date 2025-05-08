@@ -48,8 +48,7 @@ scroll_active = false
 
 [node name="Version" type="LineEdit" parent="."]
 layout_mode = 2
-text = "0.0.1.1"
-placeholder_text = "Version"
+placeholder_text = "0.0.0.0"
 script = ExtResource("1_xvjpl")
 
 [node name="HSep3" type="HSeparator" parent="."]
@@ -70,6 +69,12 @@ scroll_active = false
 [node name="BuildDesc" type="LineEdit" parent="."]
 layout_mode = 2
 placeholder_text = "Steam Build Description"
+
+[node name="OpenScripts" type="Button" parent="."]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Open scripts folder (workaround)"
 
 [node name="ReleaseList3" type="CheckBox" parent="."]
 layout_mode = 2
@@ -147,6 +152,7 @@ custom_minimum_size = Vector2(0, 256)
 layout_mode = 2
 
 [connection signal="pressed" from="BuildCompleteCheckBox" to="." method="_on_check_box_pressed"]
+[connection signal="pressed" from="OpenScripts" to="." method="_on_open_scripts_pressed"]
 [connection signal="pressed" from="GridContainer/PushDemoSteam" to="." method="_on_push_demo_steam_pressed"]
 [connection signal="pressed" from="GridContainer/PushGameSteam" to="." method="_on_push_game_steam_pressed"]
 [connection signal="pressed" from="GridContainer/PushDemoItch" to="." method="_on_push_demo_itch_pressed"]

@@ -35,41 +35,6 @@ scroll_active = false
 [node name="HSep" type="HSeparator" parent="."]
 layout_mode = 2
 
-[node name="MessageCheckBox" type="CheckBox" parent="."]
-layout_mode = 2
-size_flags_horizontal = 0
-size_flags_vertical = 6
-text = "Write a short description (and update the version if applicable)."
-
-[node name="Version" type="LineEdit" parent="."]
-layout_mode = 2
-text = "0.0.1.2"
-placeholder_text = "0.0.0.0"
-script = ExtResource("2_j4kkf")
-
-[node name="Message" type="LineEdit" parent="."]
-layout_mode = 2
-placeholder_text = "Change Description"
-emoji_menu_enabled = false
-
-[node name="HSep2" type="HSeparator" parent="."]
-layout_mode = 2
-
-[node name="TestCheckBox" type="CheckBox" parent="."]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 6
-text = "Run the unit tests for this change. Ensure they pass."
-
-[node name="TestButton" type="Button" parent="."]
-custom_minimum_size = Vector2(320, 0)
-layout_mode = 2
-size_flags_horizontal = 4
-text = "Run all unit tests"
-
-[node name="HSep3" type="HSeparator" parent="."]
-layout_mode = 2
-
 [node name="DeleteCheckBox" type="CheckBox" parent="."]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -89,21 +54,39 @@ layout_mode = 2
 size_flags_horizontal = 4
 text = "Delete previous build"
 
-[node name="BuildCheckBox" type="CheckBox" parent="."]
+[node name="HSep2" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="MessageCheckBox" type="CheckBox" parent="."]
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 6
+text = "Write a short description (and update the version if applicable)."
+
+[node name="Version" type="LineEdit" parent="."]
+layout_mode = 2
+placeholder_text = "0.0.0.0"
+script = ExtResource("2_j4kkf")
+
+[node name="Message" type="LineEdit" parent="."]
+layout_mode = 2
+placeholder_text = "Change Description"
+emoji_menu_enabled = false
+
+[node name="HSep3" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="TestCheckBox" type="CheckBox" parent="."]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 6
-text = "Export the game (both the demo and the full game)."
+text = "Run the unit tests for this change. Ensure they pass."
 
-[node name="ExportInfo" type="RichTextLabel" parent="."]
+[node name="TestButton" type="Button" parent="."]
+custom_minimum_size = Vector2(320, 0)
 layout_mode = 2
-bbcode_enabled = true
-text = "The game builds will export to [color=CYAN]res://../builds/latest/game_depot[/color].
-The demo builds will export to [color=CYAN]res://../builds/latest/demo_depot[/color].
-The web build will export to [color=CYAN]res://../builds/latest/web[/color].
-"
-fit_content = true
-scroll_active = false
+size_flags_horizontal = 4
+text = "Run all unit tests"
 
 [node name="HSep4" type="HSeparator" parent="."]
 layout_mode = 2
@@ -137,6 +120,25 @@ text = "Automatically reencode video to save space"
 [node name="HSep5" type="HSeparator" parent="."]
 layout_mode = 2
 
+[node name="BuildCheckBox" type="CheckBox" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 6
+text = "Export the game (both the demo and the full game)."
+
+[node name="ExportInfo" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "The game builds will export to [color=CYAN]res://../builds/latest/game_depot[/color].
+The demo builds will export to [color=CYAN]res://../builds/latest/demo_depot[/color].
+The web build will export to [color=CYAN]res://../builds/latest/web[/color].
+"
+fit_content = true
+scroll_active = false
+
+[node name="HSep6" type="HSeparator" parent="."]
+layout_mode = 2
+
 [node name="BuildInfo" type="RichTextLabel" parent="."]
 layout_mode = 2
 bbcode_enabled = true
@@ -151,14 +153,27 @@ size_flags_horizontal = 0
 size_flags_vertical = 6
 text = "Archive the build and gameplay sample for easy future reference."
 
-[node name="ArchiveButton" type="Button" parent="."]
-custom_minimum_size = Vector2(320, 0)
+[node name="HBoxContainer" type="HBoxContainer" parent="."]
+layout_mode = 2
+alignment = 1
+
+[node name="ArchiveButton" type="Button" parent="HBoxContainer"]
+custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 size_flags_horizontal = 4
 disabled = true
 text = "Archive this build"
 
-[node name="HSep6" type="HSeparator" parent="."]
+[node name="VSeparator" type="VSeparator" parent="HBoxContainer"]
+layout_mode = 2
+
+[node name="OpenBuildButton" type="Button" parent="HBoxContainer"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Open Build Folder"
+
+[node name="HSep7" type="HSeparator" parent="."]
 layout_mode = 2
 
 [node name="CodeReviewCheckBox" type="CheckBox" parent="."]
@@ -190,7 +205,7 @@ size_flags_horizontal = 4
 disabled = true
 text = "Copy to clipboard"
 
-[node name="HSep7" type="HSeparator" parent="."]
+[node name="HSep8" type="HSeparator" parent="."]
 layout_mode = 2
 
 [node name="ThatsAll" type="RichTextLabel" parent="."]
@@ -233,17 +248,18 @@ layout_mode = 2
 custom_minimum_size = Vector2(0, 256)
 layout_mode = 2
 
+[connection signal="pressed" from="DeleteCheckBox" to="." method="_on_check_box_pressed"]
+[connection signal="pressed" from="DeleteBuild" to="." method="_on_delete_build_pressed"]
 [connection signal="pressed" from="MessageCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="text_changed" from="Message" to="." method="_on_message_text_changed"]
 [connection signal="pressed" from="TestCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="pressed" from="TestButton" to="." method="_on_test_button_pressed"]
-[connection signal="pressed" from="DeleteCheckBox" to="." method="_on_check_box_pressed"]
-[connection signal="pressed" from="DeleteBuild" to="." method="_on_delete_build_pressed"]
-[connection signal="pressed" from="BuildCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="pressed" from="MovieCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="pressed" from="MovieButton" to="." method="_on_movie_button_pressed"]
+[connection signal="pressed" from="BuildCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="pressed" from="ArchiveCheckBox" to="." method="_on_check_box_pressed"]
-[connection signal="pressed" from="ArchiveButton" to="." method="_on_archive_button_pressed"]
+[connection signal="pressed" from="HBoxContainer/ArchiveButton" to="." method="_on_archive_button_pressed"]
+[connection signal="pressed" from="HBoxContainer/OpenBuildButton" to="." method="_on_open_build_button_pressed"]
 [connection signal="pressed" from="CodeReviewCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="pressed" from="CopyMessage" to="." method="_on_copy_message_pressed"]
 [connection signal="pressed" from="ReleaseButton" to="." method="_on_release_button_pressed"]

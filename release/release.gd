@@ -76,3 +76,8 @@ func _on_reset_button_pressed() -> void:
 
 func _on_check_box_pressed() -> void:
 	toggle_buttons_disabled()
+
+
+func _on_open_scripts_pressed() -> void:
+	var path = SteamRoller.STEAMWORKS_SDK_PATH.path_join("tools/ContentBuilder/scripts")
+	OS.shell_show_in_file_manager(ProjectSettings.globalize_path(path))
