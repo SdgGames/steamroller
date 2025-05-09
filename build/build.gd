@@ -15,7 +15,7 @@ signal description_modified(description: String)
 @onready var test_button: Button = $TestButton
 @onready var delete_build: Button = $DeleteBuild
 @onready var movie_button: Button = $MovieButton
-@onready var archive_button: Button = $ArchiveButton
+@onready var archive_button: Button = $HBoxContainer/ArchiveButton
 @onready var copy_message: Button = $CopyMessage
 @onready var reset_fields_button: Button = $ResetFields
 
@@ -214,7 +214,6 @@ func reset_buttons():
 	# De-select all checkboxes, resetting the list.
 	message_check_box.button_pressed = false
 	test_check_box.button_pressed = false
-	delete_check_box.button_pressed = false
 	build_check_box.button_pressed = false
 	movie_check_box.button_pressed = false
 	archive_check_box.button_pressed = false
@@ -241,6 +240,8 @@ func toggle_button_disabled() -> void:
 func reset():
 	message.clear()
 	reset_buttons()
+	delete_check_box.button_pressed = false
+	
 	if auto_increment_version.button_pressed:
 		# Find the position of the last dot
 		var last_dot_pos = version.text.rfind(".")
@@ -300,6 +301,7 @@ func _on_archive_button_pressed() -> void:
 
 func _on_copy_message_pressed() -> void:
 	DisplayServer.clipboard_set('git commit -m "%s"' % message.text)
+	delete_check_box.button_pressed = false
 
 
 func _on_check_box_pressed() -> void:
