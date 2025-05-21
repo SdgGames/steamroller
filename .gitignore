@@ -1,0 +1,2 @@
+# Ignores binaries - we can download these via script before we need them.
+butler-windows-amd64/
