@@ -7,6 +7,7 @@ signal reset_build
 @onready var version: LineEdit = $Version
 
 @onready var build_complete_check_box: CheckBox = $BuildCompleteCheckBox
+@onready var console_output: RichTextLabel = $ConsoleOutput
 @onready var push_buttons = [
 		$GridContainer/PushDemoSteam,
 		$GridContainer/PushGameSteam,
@@ -30,15 +31,37 @@ func build_complete():
 	toggle_buttons_disabled()
 
 
-func push_to_steam(app_id: String):
+func push_to_steam(app_id: String) -> void:
 	print("Pushing app %s to Steam." % app_id)
-	await get_tree().process_frame
-	var output = []
-	var result = OS.execute("cmd.exe", ["/c", 'C:/Users/Administrator/Desktop/SDG/Black_Hole_Fishing/steamworks_sdk/tools/ContentBuilder/builder/steamcmd.exe  +login Matt_SDG_Games +run_app_build "C:/Users/Administrator/Desktop/SDG/Black_Hole_Fishing/steamworks_sdk/tools/ContentBuilder/scripts/app_%s.vdf" +quit' % app_id], output)
-	if result == 0:
-		print("Success!")
+	
+	# Prepare the command arguments
+	var steam_cmd_path = 'C:/Users/Administrator/Desktop/SDG/Black_Hole_Fishing/steamworks_sdk/tools/ContentBuilder/builder/steamcmd.exe'
+	var script_path = 'C:/Users/Administrator/Desktop/SDG/Black_Hole_Fishing/steamworks_sdk/tools/ContentBuilder/scripts/app_%s.vdf' % app_id
+	var args = [
+		"/c", 
+		'"%s" +login Matt_SDG_Games +run_app_build "%s" +quit' % [steam_cmd_path, script_path]
+	]
+	
+	# Start the process non-blocking
+	var pid = OS.create_process("cmd.exe", args, true)
+	
+	if pid <= 0:
+		printerr("Failed to start Steam upload process for app %s" % app_id)
+		return
+	
+	print("Steam upload process started with PID: " + str(pid) + " for app " + app_id)
+	
+	# Wait while the process is running
+	while OS.is_process_running(pid):
+		await get_tree().process_frame
+	
+	# Check exit code after process finished
+	var exit_code = OS.get_process_exit_code(pid)
+	
+	if exit_code == OK:
+		print("Successfully pushed app %s to Steam" % app_id)
 	else:
-		print(output)
+		print("Failed to push app %s to Steam. Exit code: %s" % [app_id, error_string(exit_code)])
 
 
 func toggle_buttons_disabled():
@@ -47,29 +70,36 @@ func toggle_buttons_disabled():
 
 
 func _on_push_demo_steam_pressed() -> void:
-	push_to_steam("3690070")
+	await push_to_steam("3690070")
 
 func _on_push_game_steam_pressed() -> void:
-	push_to_steam("3667390")
+	await push_to_steam("3667390")
 
 
 func _on_push_demo_itch_pressed() -> void:
+	await get_tree().process_frame
 	print("TODO: Push demo to Itch")
 
 
 func _on_push_game_itch_pressed() -> void:
+	await get_tree().process_frame
 	print("TODO: Push game to Itch")
 
 
 func _on_push_all_pressed() -> void:
-	_on_push_demo_steam_pressed()
-	_on_push_game_steam_pressed()
-	_on_push_demo_itch_pressed()
-	_on_push_game_itch_pressed()
+	await _on_push_demo_steam_pressed()
+	await _on_push_game_steam_pressed()
+	await _on_push_demo_itch_pressed()
+	await _on_push_game_itch_pressed()
 
 
 func _on_reset_button_pressed() -> void:
 	build_complete_check_box.button_pressed = false
+	$ReleaseList2.button_pressed = false
+	$ReleaseList3.button_pressed = false
+	$ReleaseList4.button_pressed = false
+	$ReleaseList5.button_pressed = false
+	$ReleaseList6.button_pressed = false
 	toggle_buttons_disabled()
 	reset_build.emit()
 

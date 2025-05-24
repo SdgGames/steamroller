@@ -74,21 +74,24 @@ func record_gameplay() -> bool:
 	# Run ffmpeg to compress the video. Mark task complete if it succeeds.
 	if auto_reencode_video.button_pressed:
 		movie_button.text = "Re-encoding video"
-		if await reencode_gameplay_video(movie_path):
-			return true
+		# Don't immediately return true since we're now non-blocking
+		# The process_timer.timeout signal will handle marking the task as complete
+		return await reencode_gameplay_video(movie_path)
 	else:
 		return true
 	return false
 
 
 ## Use an external FFMPEG call to re-encode the .avi video as a much smaller .mp4
+## Use an external FFMPEG call to re-encode the .avi video as a much smaller .mp4
 func reencode_gameplay_video(movie_path: String) -> bool:
-	var output = []
 	var compressed_path = movie_path.get_basename() + "_sample.mp4"
 	
 	print("Processing video with ffmpeg...")
 	await get_tree().process_frame
-	var exit_code = OS.execute("ffmpeg", [
+	
+	# Prepare ffmpeg arguments
+	var args = [
 		"-i", ProjectSettings.globalize_path(movie_path),
 		"-vf", "scale=-1:1080",
 		"-c:v", "libx264",
@@ -98,42 +101,59 @@ func reencode_gameplay_video(movie_path: String) -> bool:
 		"-b:a", "128k",
 		"-y",
 		ProjectSettings.globalize_path(compressed_path)
-	], output, true)
+	]
 	
-	if exit_code == 0:
+	# Start the ffmpeg process non-blocking
+	var pid = OS.create_process("ffmpeg", args, true)
+	
+	if pid <= 0:
+		printerr("Failed to start ffmpeg process")
+		return false
+	
+	print("FFMPEG process started with PID: " + str(pid))
+	
+	while OS.is_process_running(pid):
+		await get_tree().process_frame
+	
+	var exit_code = OS.get_process_exit_code(pid)
+	
+	if exit_code == OK:
 		print("Video compression complete: " + compressed_path)
 		await get_tree().process_frame
 		
 		# Delete the original AVI file to save space
 		var avi_file = movie_path.get_file()
 		var avi_dir = movie_path.get_base_dir()
-
+		
 		print("Attempting to delete: " + avi_file + " from directory: " + avi_dir)
-
+		
 		# Use absolute paths to avoid issues
 		var absolute_path = ProjectSettings.globalize_path(movie_path)
 		print("Absolute path: " + absolute_path)
-
+		
 		# Try direct OS command to delete the file
 		var delete_args = []
 		if OS.get_name() == "Windows":
 			delete_args = ["cmd", "/c", "del", "/f", absolute_path.replace("/", "\\")]
 		else:
 			delete_args = ["-c", "rm -f \"" + absolute_path + "\""]
-
+		
 		var delete_output = []
 		var delete_exit_code = OS.execute("cmd" if OS.get_name() == "Windows" else "bash", delete_args, delete_output, true)
-
+		
 		if delete_exit_code == 0:
 			print("Original AVI file deleted successfully using OS command")
 		else:
-			printerr("Failed to delete using OS command: " + str(delete_exit_code))
-			printerr("Command output: " + str(delete_output))
+			printerr("Failed to delete using OS command: " + error_string(delete_exit_code))
+			printerr("Command output: " + error_string(delete_output))
 			return false
 	else:
-		printerr("FFMPEG failed with exit code: " + str(exit_code))
-		printerr("Output: " + str(output))
+		print("FFMPEG failed with exit code: " + error_string(exit_code))
 		return false
+	
+	movie_check_box.button_pressed = true
+	movie_button.text = "Recording Complete"
+	toggle_button_disabled()
 	return true
 
 
@@ -223,6 +243,7 @@ func reset_buttons():
 	test_button.text = "Run all unit tests"
 	movie_button.text = "Record gameplay sample"
 	delete_build.text = "Delete previous build"
+	archive_button.text = "Archive this build"
 	toggle_button_disabled()
 
 
@@ -230,6 +251,9 @@ func reset_buttons():
 func toggle_button_disabled() -> void:
 	delete_build.disabled = delete_check_box.button_pressed
 	movie_button.disabled = movie_check_box.button_pressed and delete_check_box.button_pressed
+	if !movie_button.disabled:
+		# Reset this each time - I delete and re-record quite often.
+		movie_button.text = "Record gameplay sample"
 	test_button.disabled = !message_check_box.button_pressed or test_check_box.button_pressed
 	archive_button.disabled = (!(build_check_box.button_pressed and movie_check_box.button_pressed) or archive_check_box.button_pressed)
 	copy_message.disabled = !(build_check_box.button_pressed and movie_check_box.button_pressed and code_review_check_box.button_pressed)
@@ -285,7 +309,9 @@ func _on_test_button_pressed() -> void:
 
 func _on_movie_button_pressed() -> void:
 	movie_button.text = "Recording Gameplay..."
+	movie_button.disabled = true
 	movie_check_box.button_pressed = await record_gameplay()
+	movie_button.disabled = false
 	movie_button.text = "Recording Complete"
 	toggle_button_disabled()
 
