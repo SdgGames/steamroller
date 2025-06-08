@@ -48,11 +48,21 @@ text = "Delete the previous build to ensure that no files are accidentally copie
 fit_content = true
 scroll_active = false
 
-[node name="DeleteBuild" type="Button" parent="."]
-custom_minimum_size = Vector2(320, 0)
+[node name="Delete" type="HBoxContainer" parent="."]
+layout_mode = 2
+alignment = 1
+
+[node name="Build" type="Button" parent="Delete"]
+custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 size_flags_horizontal = 4
 text = "Delete previous build"
+
+[node name="UserData" type="Button" parent="Delete"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Clear user data folder"
 
 [node name="HSep2" type="HSeparator" parent="."]
 layout_mode = 2
@@ -249,7 +259,8 @@ custom_minimum_size = Vector2(0, 256)
 layout_mode = 2
 
 [connection signal="pressed" from="DeleteCheckBox" to="." method="_on_check_box_pressed"]
-[connection signal="pressed" from="DeleteBuild" to="." method="_on_delete_build_pressed"]
+[connection signal="pressed" from="Delete/Build" to="." method="_on_delete_build_pressed"]
+[connection signal="pressed" from="Delete/UserData" to="." method="_on_delete_user_data_pressed"]
 [connection signal="pressed" from="MessageCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="text_changed" from="Message" to="." method="_on_message_text_changed"]
 [connection signal="pressed" from="TestCheckBox" to="." method="_on_check_box_pressed"]

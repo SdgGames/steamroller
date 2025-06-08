@@ -13,7 +13,7 @@ signal description_modified(description: String)
 
 # Buttons to run the steps that can be automated.
 @onready var test_button: Button = $TestButton
-@onready var delete_build: Button = $DeleteBuild
+@onready var delete_build: Button = $Delete/Build
 @onready var movie_button: Button = $MovieButton
 @onready var archive_button: Button = $HBoxContainer/ArchiveButton
 @onready var copy_message: Button = $CopyMessage
@@ -344,3 +344,17 @@ func _on_reset_fields_pressed() -> void:
 
 func _on_open_build_button_pressed() -> void:
 	OS.shell_show_in_file_manager(ProjectSettings.globalize_path(SteamRoller.LATEST_BUILD_BASE_PATH))
+
+
+func _on_delete_user_data_pressed() -> void:
+	# First remove the directory if it exists
+	var output = []
+	
+	var userdir = ProjectSettings.globalize_path("user://").replace("/", "\\")
+	var exit_code = OS.execute("cmd", ["/c", 
+		"if exist \"" + userdir + "\" rmdir /s /q \"" + userdir + "\""
+	], output, true)
+	if exit_code == 0:
+		print("User folder cleared.")
+	else:
+		printerr("Failed to delete user data: " + str(output))
