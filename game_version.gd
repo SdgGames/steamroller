@@ -23,6 +23,8 @@ static func get_version_string() -> String:
 		version += ".Dev"
 	if is_demo_mode():
 		version += ".Demo"
+	if is_web_build():
+		version += ".Web"
 	return version
 
 
@@ -41,7 +43,7 @@ static func set_version_number(version: String):
 	ProjectSettings.set_setting(VERSION_SETTING_PATH, version)
 
 
-## Returns whether the game is currently in demo mode.
+## Returns true if the game is currently in demo mode.
 ## This first checks for the existance of a "demo" or "full" flag,
 ## then checks Project Settings as a fallback.
 ##
@@ -54,6 +56,13 @@ static func is_demo_mode() -> bool:
 	elif OS.has_feature("full"):
 		is_demo = false
 	return is_demo
+
+
+## Returns true if the game is a web build.
+##
+## This will only be true if the game has been exported and is running in a browser.
+static func is_web_build() -> bool:
+	return OS.has_feature("web")
 
 
 ## Changes the demo mode state and saves project settings.

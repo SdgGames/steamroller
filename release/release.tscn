@@ -84,28 +84,38 @@ text = "Play the exported game executable to verify its integrity"
 layout_mode = 2
 text = "Push your changes to Steam and/or Itch"
 
-[node name="GridContainer" type="GridContainer" parent="."]
+[node name="Push" type="GridContainer" parent="."]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-columns = 2
+columns = 3
 
-[node name="PushDemoSteam" type="Button" parent="GridContainer"]
+[node name="PushDemoSteam" type="Button" parent="Push"]
 layout_mode = 2
 disabled = true
 text = "Push Demo to Steam"
 
-[node name="PushGameSteam" type="Button" parent="GridContainer"]
+[node name="PushGameSteam" type="Button" parent="Push"]
 layout_mode = 2
 disabled = true
 text = "Push Game to Steam"
 
-[node name="PushDemoItch" type="Button" parent="GridContainer"]
+[node name="Itch" type="HBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="PushDemoItch" type="Button" parent="Itch"]
 layout_mode = 2
 disabled = true
 text = "Push Demo to Itch"
 
-[node name="PushGameItch" type="Button" parent="GridContainer"]
+[node name="PushWebItch" type="Button" parent="Itch"]
+layout_mode = 2
+disabled = true
+text = "Push Web Build to Itch"
+
+[node name="PushGameItch" type="Button" parent="Itch"]
 layout_mode = 2
 disabled = true
 text = "Push Game to Itch"
@@ -153,9 +163,10 @@ layout_mode = 2
 
 [connection signal="pressed" from="BuildCompleteCheckBox" to="." method="_on_check_box_pressed"]
 [connection signal="pressed" from="OpenScripts" to="." method="_on_open_scripts_pressed"]
-[connection signal="pressed" from="GridContainer/PushDemoSteam" to="." method="_on_push_demo_steam_pressed"]
-[connection signal="pressed" from="GridContainer/PushGameSteam" to="." method="_on_push_game_steam_pressed"]
-[connection signal="pressed" from="GridContainer/PushDemoItch" to="." method="_on_push_demo_itch_pressed"]
-[connection signal="pressed" from="GridContainer/PushGameItch" to="." method="_on_push_game_itch_pressed"]
+[connection signal="pressed" from="Push/PushDemoSteam" to="." method="_on_push_demo_steam_pressed"]
+[connection signal="pressed" from="Push/PushGameSteam" to="." method="_on_push_game_steam_pressed"]
+[connection signal="pressed" from="Itch/PushDemoItch" to="." method="_on_push_demo_itch_pressed"]
+[connection signal="pressed" from="Itch/PushWebItch" to="." method="_on_push_web_itch_pressed"]
+[connection signal="pressed" from="Itch/PushGameItch" to="." method="_on_push_game_itch_pressed"]
 [connection signal="pressed" from="PushAll" to="." method="_on_push_all_pressed"]
 [connection signal="pressed" from="ResetButton" to="." method="_on_reset_button_pressed"]

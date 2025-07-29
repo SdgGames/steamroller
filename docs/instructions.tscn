@@ -139,6 +139,13 @@ If you want to play this latest version without having to open your dashboard, t
 fit_content = true
 scroll_active = false
 
+[node name="Itch1" type="RichTextLabel" parent="."]
+layout_mode = 2
+bbcode_enabled = true
+text = "TODO: Update instructions for Itch. I need to test this with a new game, but for now, this works as long as you authenticate once. The first time you push, a browser window will open. Click authenticate to grant Butler permissions to push."
+fit_content = true
+scroll_active = false
+
 [node name="Control" type="Control" parent="."]
 custom_minimum_size = Vector2(0, 256)
 layout_mode = 2
