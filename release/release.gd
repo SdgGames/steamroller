@@ -51,9 +51,11 @@ func push_to_steam(app_id: String) -> void:
 	# Prepare the command arguments
 	var args = [
 		"/c", 
-		'"%s" +login %s +run_app_build "%s" +quit' % [STEAM_USER, STEAM_CMD_PATH, VDF_FILE % app_id]
+		'"%s" +login %s +run_app_build "%s" +quit' % [STEAM_CMD_PATH, STEAM_USER, VDF_FILE % app_id]
 	]
 	
+	print("Running command: %s %s" % ["cmd.exe", " ".join(args)])
+
 	# Start the process non-blocking
 	var pid = OS.create_process("cmd.exe", args, true)
 	
