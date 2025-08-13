@@ -20,7 +20,7 @@ alignment = 2
 
 [node name="SteamRoller" type="Label" parent="Header"]
 layout_mode = 2
-text = "SteamRoller V.0.1"
+text = "SteamRoller V.0.2"
 
 [node name="GameVersion" type="Label" parent="Header"]
 layout_mode = 2
