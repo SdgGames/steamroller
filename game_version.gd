@@ -38,6 +38,11 @@ static func get_version_number() -> String:
 	return ProjectSettings.get_setting(VERSION_SETTING_PATH)
 
 
+## Returns the current version number of the game engine.
+static func get_engine_version_string() -> String:
+	return Engine.get_version_info().string
+
+
 ## Sets the version number string in Project Settings.
 static func set_version_number(version: String):
 	ProjectSettings.set_setting(VERSION_SETTING_PATH, version)
