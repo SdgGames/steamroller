@@ -13,7 +13,7 @@ const DEPOT_ID_FULL = "3667390"
 const VDF_FILE = "C:/Users/Administrator/Desktop/SDG/Black_Hole_Fishing/steamworks_sdk/tools/ContentBuilder/scripts/app_%s.vdf"
 
 const ITCH_USER = "sdggames"
-const ITCH_PROJECT = "black-hole-fishing"
+const ITCH_PROJECT = "black-hole-fishing-beta"
 
 
 @onready var build_desc: LineEdit = $BuildDesc
