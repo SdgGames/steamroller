@@ -37,8 +37,8 @@ signal description_modified(description: String)
 ## Run the unit tests in GdUnit4.
 func run_tests() -> void:
 	print("Running all GdUnit tests...")
-	GdUnitCommandHandler.instance().cmd_run_overall(true)
-	
+	await GdUnitCommandHandler.instance().command_execute(GdUnitCommandRunTestsOverall.ID)
+
 	# Pause here until we are done.
 	while EditorInterface.is_playing_scene():
 		await get_tree().create_timer(0.5).timeout
