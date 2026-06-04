@@ -1,109 +1,59 @@
-[gd_scene load_steps=5 format=3 uid="uid://chhwdl7xuik1r"]
+[gd_scene format=3 uid="uid://chhwdl7xuik1r"]
 
-[ext_resource type="Script" uid="uid://byfu8d8gdlgms" path="res://addons/steamroller/steamroller_panel.gd" id="1_m3gm2"]
-[ext_resource type="PackedScene" uid="uid://dbqkoxjd0ybt0" path="res://addons/steamroller/build/build.tscn" id="2_tmjlb"]
-[ext_resource type="PackedScene" uid="uid://ci0h8yey72wi2" path="res://addons/steamroller/release/release.tscn" id="3_tmjlb"]
-[ext_resource type="PackedScene" uid="uid://bqi20akqnyuja" path="res://addons/steamroller/docs/instructions.tscn" id="4_tmjlb"]
+[ext_resource type="Script" uid="uid://b57y7abgova24" path="res://addons/steamroller/steamroller_panel.gd" id="1_panel"]
+[ext_resource type="PackedScene" uid="uid://bqi20akqnyuja" path="res://addons/steamroller/docs/instructions.tscn" id="2_instructions"]
 
-[node name="SteamRoller" type="VBoxContainer"]
+[node name="SteamRoller" type="Control" unique_id=17614416]
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_m3gm2")
-metadata/_edit_lock_ = true
+script = ExtResource("1_panel")
 
-[node name="Header" type="HBoxContainer" parent="."]
+[node name="V" type="VBoxContainer" parent="." unique_id=401997693]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Header" type="HBoxContainer" parent="V" unique_id=1389095392]
 layout_mode = 2
-alignment = 2
 
-[node name="SteamRoller" type="Label" parent="Header"]
+[node name="Title" type="Label" parent="V/Header" unique_id=1386066112]
 layout_mode = 2
-text = "SteamRoller V.0.2"
+text = "SteamRoller Game Template"
 
-[node name="GameVersion" type="Label" parent="Header"]
+[node name="Version" type="Label" parent="V/Header" unique_id=1292519746]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Game v0.0.0.0.Dev"
+text = "Template 0.0.0.1"
 horizontal_alignment = 1
 
-[node name="DemoToggle" type="CheckButton" parent="Header"]
+[node name="DemoToggle" type="CheckButton" parent="V/Header" unique_id=871951652]
 layout_mode = 2
-size_flags_horizontal = 8
-text = "Demo mode:"
+text = "Demo"
 
-[node name="TabContainer" type="TabContainer" parent="."]
+[node name="Status" type="Label" parent="V" unique_id=990648068]
+visible = false
 layout_mode = 2
+autowrap_mode = 2
+
+[node name="Tabs" type="TabContainer" parent="V" unique_id=757826489]
+layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 current_tab = 0
 
-[node name="Build" type="ScrollContainer" parent="TabContainer"]
-layout_mode = 2
-metadata/_edit_lock_ = true
-metadata/_tab_index = 0
-
-[node name="Build" parent="TabContainer/Build" instance=ExtResource("2_tmjlb")]
-layout_mode = 2
-
-[node name="Release" type="ScrollContainer" parent="TabContainer"]
+[node name="Start Guide" type="ScrollContainer" parent="V/Tabs" unique_id=2138134899]
 visible = false
 layout_mode = 2
-metadata/_tab_index = 1
-metadata/_edit_lock_ = true
-
-[node name="Release" parent="TabContainer/Release" instance=ExtResource("3_tmjlb")]
-layout_mode = 2
-
-[node name="Start Guide" type="ScrollContainer" parent="TabContainer"]
-visible = false
-layout_mode = 2
-metadata/_edit_lock_ = true
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
 metadata/_tab_index = 2
 
-[node name="Instructions" parent="TabContainer/Start Guide" instance=ExtResource("4_tmjlb")]
+[node name="Instructions" parent="V/Tabs/Start Guide" unique_id=1197000131 instance=ExtResource("2_instructions")]
 layout_mode = 2
-
-[node name="Dev Notes (TODO)" type="ScrollContainer" parent="TabContainer"]
-visible = false
-layout_mode = 2
-scroll_vertical = 100
-metadata/_edit_lock_ = true
-metadata/_tab_index = 3
-
-[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/Dev Notes (TODO)"]
-layout_mode = 2
-size_flags_horizontal = 6
-size_flags_vertical = 2
-metadata/_edit_lock_ = true
-
-[node name="Todo" type="Label" parent="TabContainer/Dev Notes (TODO)/VBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 2
-size_flags_vertical = 6
-text = "
-Extra tools I want to develop.
-- Save/load manager
-   Tool that lets me inspect save files and ensure that I have defaults set.
-
-- Butler and SteamPipe integration
-   - One click deploy to Itch
-   - Toggle between Demo mode and Release mode
-   - Push to Steam Depot (select based on demo or release mode)
-
-- Config options (maybe put in Project Settings?)
-   - Itch game name and Steam app ID
-   - API endpoint for bug reports
-   - URL and app ID for wishilst button
-   - Discord community link
-   - Feedback survey link
-
-- Configuration checklist (list of things I need to do before this is working)
-   - Set up Itch game name
-   - Set up Steam app ID
-   - Set URLs and endpoints"
-
-[connection signal="toggled" from="Header/DemoToggle" to="." method="_on_demo_toggle_toggled"]
-[connection signal="description_modified" from="TabContainer/Build/Build" to="." method="_on_build_description_modified"]
-[connection signal="to_release" from="TabContainer/Build/Build" to="." method="_on_build_to_release"]
-[connection signal="reset_build" from="TabContainer/Release/Release" to="." method="_on_release_reset_build"]

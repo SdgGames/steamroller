@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://b1c0n50leuid01"]
+
+[ext_resource type="Script" path="res://addons/steamroller/ui/console_output.gd" id="1_console"]
+
+[node name="Console" type="RichTextLabel"]
+size_flags_horizontal = 3
+bbcode_enabled = true
+scroll_following = true
+selection_enabled = true
+visible = false
+script = ExtResource("1_console")

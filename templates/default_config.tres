@@ -1,0 +1,201 @@
+[gd_resource type="Resource" script_class="SteamRollerConfig" format=3 uid="uid://lwxyos7nd4k"]
+
+[ext_resource type="Script" uid="uid://b4h3l5eronhto" path="res://addons/steamroller/config/steamroller_config.gd" id="1_cfg"]
+[ext_resource type="Script" uid="uid://dqwdndfgpo67s" path="res://addons/steamroller/config/steamroller_step.gd" id="2_step"]
+
+[sub_resource type="Resource" id="s_version"]
+script = ExtResource("2_step")
+id = "version"
+action = 2
+display_name = "Version"
+description = "[i]Project version. Persisted to application/config/version. Each build increments the last numeric segment.[/i]"
+depends_on = PackedStringArray()
+target_variable = "VERSION"
+project_setting_path = "application/config/version"
+default_value = "0.0.1"
+placeholder = "0.0.1"
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_commit"]
+script = ExtResource("2_step")
+id = "commit_message"
+action = 2
+display_name = "Message"
+description = "[i]Short description of this build. Used by later steps.[/i]"
+depends_on = PackedStringArray()
+target_variable = "COMMIT_MESSAGE"
+project_setting_path = "application/config/commit_message"
+placeholder = "What changed?"
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_tests"]
+script = ExtResource("2_step")
+id = "tests"
+action = 3
+display_name = "Run the unit tests for this change. Ensure they pass."
+description = "Run all [color=cyan]GdUnit4[/color] tests. Disabled if GdUnit is not installed."
+depends_on = PackedStringArray("commit_message")
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_delete"]
+script = ExtResource("2_step")
+id = "delete_build"
+action = 5
+display_name = "Reset the build output folder."
+description = "Clears [color=cyan]${BUILDS_DIR}/latest[/color] and recreates the depot subfolders."
+depends_on = PackedStringArray("commit_message")
+button_label = "Reset build folder"
+params = {
+"path": "${BUILDS_DIR}/latest",
+"paths": ["${BUILDS_DIR}/latest", "${BUILDS_DIR}/latest/game_depot", "${BUILDS_DIR}/latest/demo_depot", "${BUILDS_DIR}/latest/web"]
+}
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_clear_user"]
+script = ExtResource("2_step")
+action = 8
+depends_on = PackedStringArray()
+button_label = "Clear user data folder"
+is_optional = true
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_open_build"]
+script = ExtResource("2_step")
+action = 9
+depends_on = PackedStringArray()
+button_label = "Open build folder"
+is_optional = true
+params = {
+"path": "${BUILDS_DIR}/latest"
+}
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_export"]
+script = ExtResource("2_step")
+id = "export_reminder"
+display_name = "Export the game from Godot (Project → Export → Export All)."
+description = "Run all platform exports into [color=cyan]${BUILDS_DIR}/latest/[/color]."
+depends_on = PackedStringArray("delete_build")
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_movie"]
+script = ExtResource("2_step")
+id = "movie"
+action = 4
+display_name = "Record a gameplay sample showcasing the latest changes."
+description = "Plays the main scene in movie maker mode, then re-encodes the AVI to MP4 via ffmpeg."
+depends_on = PackedStringArray("export_reminder")
+params = {
+"output_path": "${BUILDS_DIR}/latest/gameplay.avi",
+"reencode": true
+}
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_archive"]
+script = ExtResource("2_step")
+id = "archive"
+action = 7
+display_name = "Archive this build for future reference."
+description = "Copies [color=cyan]${BUILDS_DIR}/latest[/color] → [color=cyan]${BUILDS_DIR}/${VERSION}_${COMMIT_MESSAGE}[/color]."
+depends_on = PackedStringArray("movie")
+params = {
+"destination": "${BUILDS_DIR}/${VERSION}_${COMMIT_MESSAGE}",
+"source": "${BUILDS_DIR}/latest"
+}
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_review"]
+script = ExtResource("2_step")
+id = "code_review"
+display_name = "Do a final code review (make sure nothing weird got in the commit)."
+depends_on = PackedStringArray("archive")
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_copy"]
+script = ExtResource("2_step")
+id = "copy_commit"
+action = 10
+display_name = "Commit and push your changes to source control."
+description = "Copies to the clipboard:
+[code]git commit -m \"${VERSION} ${COMMIT_MESSAGE}\"[/code]"
+depends_on = PackedStringArray("code_review")
+button_label = "Copy git commit"
+params = {
+"text": "git commit -m \"${VERSION} ${COMMIT_MESSAGE}\""
+}
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_reset"]
+script = ExtResource("2_step")
+id = "reset_increment"
+action = 11
+display_name = "Reset the checklist and increment the version for the next build."
+description = "Clears completion state for this tab and bumps the last numeric segment of [code]${VERSION}[/code]."
+depends_on = PackedStringArray()
+button_label = "Reset & increment"
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_release_tab"]
+script = ExtResource("2_step")
+action = 1
+depends_on = PackedStringArray()
+args = PackedStringArray()
+tab_name = "Release"
+
+[sub_resource type="Resource" id="s_build_ok"]
+script = ExtResource("2_step")
+id = "build_complete"
+display_name = "Smoke-test the archived build before pushing."
+description = "Smoke-tested the archived build."
+depends_on = PackedStringArray()
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_open_vdf"]
+script = ExtResource("2_step")
+id = "open_vdf"
+action = 9
+display_name = "Update the build description in the VDF script."
+description = "[i]TODO: replace this with automated VDF editing.[/i] For now, edit the [code]desc[/code] field in the .vdf file so the Steam build is labelled correctly."
+depends_on = PackedStringArray("build_complete")
+button_label = "Open VDF scripts folder"
+params = {
+"path": "${VDF_DIR}"
+}
+args = PackedStringArray()
+
+[sub_resource type="Resource" id="s_push_steam"]
+script = ExtResource("2_step")
+id = "push_steam"
+action = 12
+display_name = "Push the build to Steam."
+description = "Uploads via [code]steamcmd[/code]. Default app id [b]480[/b] is Valve's [i]SpaceWar[/i] test app."
+depends_on = PackedStringArray("build_complete")
+button_label = "Push to Steam"
+executable = "${STEAM_CMD_PATH}"
+args = PackedStringArray("+login", "${STEAM_USER}", "+run_app_build", "${VDF_DIR}/app_${STEAM_APP_ID}.vdf", "+quit")
+
+[sub_resource type="Resource" id="s_push_itch"]
+script = ExtResource("2_step")
+id = "push_itch"
+action = 12
+display_name = "Push the build to Itch."
+description = "Uploads via [code]butler[/code] to [color=cyan]${ITCH_USER}/${ITCH_PROJECT}:full[/color]."
+depends_on = PackedStringArray("build_complete")
+button_label = "Push to Itch"
+executable = "${BUTLER_PATH}"
+args = PackedStringArray("push", "${BUILDS_DIR}/latest/game_depot", "${ITCH_USER}/${ITCH_PROJECT}:full", "--userversion", "${VERSION}")
+
+[resource]
+script = ExtResource("1_cfg")
+config_name = "SteamRoller Game Template"
+variables = {
+"BUILDS_DIR": "${PROJECT_DIR}../builds",
+"BUTLER_PATH": "${PROJECT_DIR}addons/steamroller/butler-windows-amd64/butler.exe",
+"ITCH_PROJECT": "",
+"ITCH_USER": "",
+"STEAM_APP_ID": "480",
+"STEAM_CMD_PATH": "${PROJECT_DIR}../steamworks_sdk/tools/ContentBuilder/builder/steamcmd.exe",
+"STEAM_USER": "",
+"VDF_DIR": "${PROJECT_DIR}../steamworks_sdk/tools/ContentBuilder/scripts"
+}
+steps = [SubResource("s_version"), SubResource("s_commit"), SubResource("s_tests"), SubResource("s_delete"), SubResource("s_clear_user"), SubResource("s_open_build"), SubResource("s_export"), SubResource("s_movie"), SubResource("s_archive"), SubResource("s_open_build"), SubResource("s_review"), SubResource("s_copy"), SubResource("s_reset"), SubResource("s_release_tab"), SubResource("s_build_ok"), SubResource("s_open_vdf"), SubResource("s_push_steam"), SubResource("s_push_itch"), SubResource("s_reset")]

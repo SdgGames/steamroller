@@ -1,57 +1,143 @@
 @tool
-class_name SteamRoller extends Control
+class_name SteamRollerPanel extends Control
+## Main editor dock.
+##
+## Walks the active config's step list, splits on NEW_TAB entries, and builds
+## one TabContainer page per group. Each step gets a SteamRollerStepRow plus
+## an HSeparator between rows.
 
-const VERSION_SETTING_PATH = "application/config/version"
-const APP_NAME_SETTING_PATH = "application/config/name"
+const CONFIG_PATH_SETTING := "application/steamroller/config_path"
 
-# File paths - these are constants because external tools rely on them.
-const BUILD_FOLDER_PATH = "res://../builds"
-const LATEST_BUILD_BASE_PATH = "res://../builds/latest"
-const GAME_DEPOT_PATH = "res://../builds/latest/game_depot"
-const DEMO_DEPOT_PATH = "res://../builds/latest/demo_depot"
-const WEB_BUILD_PATH = "res://../builds/latest/web"
-# Constants for SDK paths
-const STEAMWORKS_SDK_PATH = "res://../steamworks_sdk"
-const STEAM_CMD_PATH = "/tools/ContentBuilder/builder/steamcmd.exe"
+@onready var title_label: Label = $V/Header/Title
+@onready var version_label: Label = $V/Header/Version
+@onready var demo_toggle: CheckButton = $V/Header/DemoToggle
+@onready var status_label: Label = $V/Status
+@onready var tabs: TabContainer = $V/Tabs
+@onready var instructions_page: Control = $"V/Tabs/Start Guide"
 
-## A reference to the build tab. I should go through the automated build process for each commit.
-@onready var build_tab: ScrollContainer = $TabContainer/Build
-@onready var build: VBoxContainer = $"TabContainer/Build/Build"
-## A reference to the release tab. I should run this before merging a branch to to Main in git.
-@onready var release_tab: ScrollContainer = $TabContainer/Release
-@onready var release: VBoxContainer = $TabContainer/Release/Release
-## The version and demo status of the game.
-@onready var game_version: Label = $Header/GameVersion
-@onready var demo_toggle: CheckButton = $Header/DemoToggle
+var runner: SteamRollerRunner
+var config: SteamRollerConfig
 
 
 func _ready() -> void:
-	add_to_group("settings_sync")
-	update_settings()
+	runner = SteamRollerRunner.new()
+	runner.name = "Runner"
+	add_child(runner)
+
+	demo_toggle.toggled.connect(_on_demo_toggled)
+	_clear_tabs()
+	config = _load_config()
+	if config == null:
+		status_label.text = "No config loaded. Set application/steamroller/config_path."
+		status_label.visible = true
+		title_label.text = "SteamRoller"
+		version_label.text = ""
+		_pin_instructions_tab()
+		return
+	status_label.visible = false
+	runner.load_config(config)
+	runner.variables_changed.connect(_refresh_header)
+	_refresh_header()
+	_build_tabs()
+	_pin_instructions_tab()
 
 
-# Update the version info at the top of the panel.
-func update_settings():
-	demo_toggle.button_pressed = GameVersion.is_demo_mode()
-	game_version.text = GameVersion.get_application_name() + " " + GameVersion.get_version_string()
+func _load_config() -> SteamRollerConfig:
+	var path := str(ProjectSettings.get_setting(CONFIG_PATH_SETTING, ""))
+	if path.is_empty():
+		push_warning("[SteamRoller] No config_path set.")
+		return null
+	if not ResourceLoader.exists(path):
+		push_warning("[SteamRoller] Config not found at %s" % path)
+		return null
+	var res := load(path)
+	if res is SteamRollerConfig:
+		return res
+	push_warning("[SteamRoller] Resource at %s is not a SteamRollerConfig." % path)
+	return null
 
 
-func _on_build_to_release() -> void:
-	release.build_complete()
-	release_tab.visible = true
-	release_tab.scroll_vertical = 0
+func _refresh_header() -> void:
+	title_label.text = config.config_name if config else "SteamRoller"
+	var name_part := str(ProjectSettings.get_setting("application/config/name", ""))
+	var version_part := str(ProjectSettings.get_setting("application/config/version", ""))
+	version_label.text = "%s %s" % [name_part, version_part]
+	if ProjectSettings.has_setting("application/steamroller/demo_mode"):
+		demo_toggle.set_pressed_no_signal(
+			bool(ProjectSettings.get_setting("application/steamroller/demo_mode", false))
+		)
 
 
-func _on_release_reset_build() -> void:
-	build.reset()
-	build_tab.visible = true
-	build_tab.scroll_vertical = 0
+func _clear_tabs() -> void:
+	for child in tabs.get_children():
+		if child == instructions_page:
+			continue
+		child.queue_free()
 
 
-func _on_build_description_modified(description: String) -> void:
-	release.update_build_description(description)
+func _pin_instructions_tab() -> void:
+	if instructions_page.get_index() != tabs.get_child_count() - 1:
+		tabs.move_child(instructions_page, -1)
 
 
-func _on_demo_toggle_toggled(toggled_on: bool) -> void:
-	GameVersion.set_demo_mode(toggled_on)
-	get_tree().call_group("settings_sync", "update_settings")
+func _build_tabs() -> void:
+	var current_list := _make_tab_page(config.first_tab_name)
+	var last_row: SteamRollerStepRow = null
+	for step in config.steps:
+		if step == null:
+			continue
+		if step.action == SteamRollerStep.Action.NEW_TAB:
+			current_list = _make_tab_page(step.tab_name)
+			last_row = null
+			continue
+		if step.is_optional:
+			# Attach to the previous row's button flow if possible.
+			if last_row != null and last_row.has_button_flow():
+				last_row.attach_optional_button(step)
+				continue
+			# No suitable previous row — create an orphan button-only row.
+			# This handles the "first step in a tab is optional" case and
+			# the "previous step has no button" case.
+			var orphan := SteamRollerStepRow.new()
+			current_list.add_child(orphan)
+			orphan.setup(step, runner)
+			# Treat orphan as the new "last row" so subsequent optional steps
+			# can attach to it.
+			last_row = orphan
+			current_list.add_child(HSeparator.new())
+			continue
+		# Standard step row + separator.
+		var row := SteamRollerStepRow.new()
+		current_list.add_child(row)
+		row.setup(step, runner)
+		current_list.add_child(HSeparator.new())
+		last_row = row
+
+
+## Create a new tab page (MarginContainer > ScrollContainer > VBoxContainer)
+## and return the VBoxContainer that rows should be added to.
+func _make_tab_page(tab_name: String) -> VBoxContainer:
+	var page := MarginContainer.new()
+	page.name = tab_name if not tab_name.is_empty() else "Tab"
+	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		page.add_theme_constant_override(side, 6)
+	tabs.add_child(page)
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.add_child(scroll)
+
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 4)
+	scroll.add_child(list)
+	return list
+
+
+func _on_demo_toggled(value: bool) -> void:
+	ProjectSettings.set_setting("application/steamroller/demo_mode", value)
+	ProjectSettings.save()
+	runner.rebuild_variables()
+	_refresh_header()

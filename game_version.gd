@@ -1,24 +1,49 @@
 @tool
-## Provides configuration and version management for the game
-## Handles Steam app/depot IDs and demo mode switching
 class_name GameVersion
+## Version and demo-mode state for the host project.
+##
+## Lightweight static helpers for Godot's `application/config/*` settings and
+## SteamRoller-specific `application/steamroller/*` settings. Settings
+## registration is called from the SteamRoller plugin on activation.
 
-# Settings constants
-const APP_NAME_SETTING_PATH = "application/config/name"
-const VERSION_SETTING_PATH = "application/config/version"
-const SETTINGS_PREFIX = "application/steamroller/"
-const DEMO_MODE_SETTING = SETTINGS_PREFIX + "demo_mode"
-const FULL_APP_ID_SETTING = SETTINGS_PREFIX + "full_app_id"
-const FULL_DEPOT_ID_SETTING = SETTINGS_PREFIX + "full_depot_id"
-const DEMO_APP_ID_SETTING = SETTINGS_PREFIX + "demo_app_id" 
-const DEMO_DEPOT_ID_SETTING = SETTINGS_PREFIX + "demo_depot_id"
+const SETTINGS_PREFIX := "application/steamroller/"
+const DEMO_MODE_SETTING := SETTINGS_PREFIX + "demo_mode"
+const FULL_APP_ID_SETTING := SETTINGS_PREFIX + "full_app_id"
+const DEMO_APP_ID_SETTING := SETTINGS_PREFIX + "demo_app_id"
+const FULL_DEPOT_ID_SETTING := SETTINGS_PREFIX + "full_depot_id"
+const DEMO_DEPOT_ID_SETTING := SETTINGS_PREFIX + "demo_depot_id"
+const CONFIG_PATH_SETTING := SETTINGS_PREFIX + "config_path"
+
+const VERSION_SETTING := "application/config/version"
+const APP_NAME_SETTING := "application/config/name"
+const COMMIT_MESSAGE_SETTING := "application/config/commit_message"
+
+const DEFAULT_CONFIG_PATH := "res://addons/steamroller/templates/default_config.tres"
+const SPACEWAR_APP_ID := "480"
 
 
-## Returns a human-readable string containing the version number and demo or
-## release status. Example strings: V_0.0.3.2.Dev.Demo, V_1.0.1.0.Final
+## Register all SteamRoller-managed project settings. Idempotent — safe to
+## call from `plugin.gd::_enter_tree()` every editor load.
+static func register_settings() -> void:
+	_register_default(DEMO_MODE_SETTING, false, TYPE_BOOL)
+	_register_default(FULL_APP_ID_SETTING, SPACEWAR_APP_ID, TYPE_STRING)
+	_register_default(DEMO_APP_ID_SETTING, SPACEWAR_APP_ID, TYPE_STRING)
+	_register_default(FULL_DEPOT_ID_SETTING, "", TYPE_STRING)
+	_register_default(DEMO_DEPOT_ID_SETTING, "", TYPE_STRING)
+	_register_default(CONFIG_PATH_SETTING, DEFAULT_CONFIG_PATH, TYPE_STRING,
+		PROPERTY_HINT_FILE, "*.tres")
+	# Commit message lives next to the version setting in Godot's own config
+	# section so both survive editor restarts and so external tools can read
+	# them from the same place.
+	_register_default(COMMIT_MESSAGE_SETTING, "", TYPE_STRING)
+
+
+# --- Accessors -------------------------------------------------------------
+
+## Returns a human-readable version string with build-type suffixes appended.
+## Examples: "v0.2.0.Dev", "v1.0.0.Demo", "v1.0.0.Web"
 static func get_version_string() -> String:
-	var version = "v"
-	version += get_version_number()
+	var version := "v" + get_version_number()
 	if OS.has_feature("editor"):
 		version += ".Dev"
 	if is_demo_mode():
@@ -28,123 +53,89 @@ static func get_version_string() -> String:
 	return version
 
 
-## Returns the name of the game from Project Settings.
-static func get_application_name():
-	return ProjectSettings.get_setting(APP_NAME_SETTING_PATH)
-
-
-## Returns the version number string from Project Settings ("0.2.0.1" or similar).
+## Returns the raw version number string from Project Settings ("0.2.0.1" or similar).
 static func get_version_number() -> String:
-	return ProjectSettings.get_setting(VERSION_SETTING_PATH)
+	return str(ProjectSettings.get_setting(VERSION_SETTING, ""))
 
 
-## Returns the current version number of the game engine.
+## Sets the version number string in Project Settings.
+static func set_version_number(version: String) -> void:
+	ProjectSettings.set_setting(VERSION_SETTING, version)
+	ProjectSettings.save()
+
+
+## Returns the name of the game from Project Settings.
+static func get_application_name() -> String:
+	return str(ProjectSettings.get_setting(APP_NAME_SETTING, ""))
+
+
+## Returns the current Godot engine version string.
 static func get_engine_version_string() -> String:
 	return Engine.get_version_info().string
 
 
-## Sets the version number string in Project Settings.
-static func set_version_number(version: String):
-	ProjectSettings.set_setting(VERSION_SETTING_PATH, version)
+## Returns the commit message stored in Project Settings for the current release.
+static func get_commit_message() -> String:
+	return str(ProjectSettings.get_setting(COMMIT_MESSAGE_SETTING, ""))
+
+
+## Saves a commit message to Project Settings for use in release workflows.
+static func set_commit_message(value: String) -> void:
+	ProjectSettings.set_setting(COMMIT_MESSAGE_SETTING, value)
+	ProjectSettings.save()
 
 
 ## Returns true if the game is currently in demo mode.
-## This first checks for the existance of a "demo" or "full" flag,
-## then checks Project Settings as a fallback.
 ##
-## Practically, this means that the demo setting will take precidence in the editor,
-## but the export flags will take over once the game is released.
+## Export feature flags take precedence over the Project Settings toggle: a
+## build exported with the "demo" feature is always demo, and one exported
+## with "full" is never demo, regardless of the editor setting.
 static func is_demo_mode() -> bool:
-	var is_demo = ProjectSettings.get_setting(DEMO_MODE_SETTING, false)
 	if OS.has_feature("demo"):
-		is_demo = true
-	elif OS.has_feature("full"):
-		is_demo = false
-	return is_demo
+		return true
+	if OS.has_feature("full"):
+		return false
+	return bool(ProjectSettings.get_setting(DEMO_MODE_SETTING, false))
 
 
-## Returns true if the game is a web build.
-##
-## This will only be true if the game has been exported and is running in a browser.
+## Returns true if the game is running as a web export.
 static func is_web_build() -> bool:
 	return OS.has_feature("web")
 
 
-## Changes the demo mode state and saves project settings.
-## This only affects the demo mode flag in the editor. For release builds,
-## the "demo" or "full" flags will override the demo setting.
-## 
-## Please note: setting this at runtime will have unexpected results - many game
-## elements will only check the demo flag once when the game starts.
-static func set_demo_mode(enabled: bool) -> void:
-	ProjectSettings.set_setting(DEMO_MODE_SETTING, enabled)
+## Changes the demo mode flag in Project Settings.
+##
+## Only affects editor runs. Exported builds use "demo"/"full" feature flags
+## which override this setting (see is_demo_mode). Setting this at runtime
+## will not affect systems that already read the flag at startup.
+static func set_demo_mode(value: bool) -> void:
+	ProjectSettings.set_setting(DEMO_MODE_SETTING, value)
 	ProjectSettings.save()
 
 
-## Gets the appropriate Steam App ID based on current demo mode
-static func get_app_id() -> int:
-	return ProjectSettings.get_setting(
-		DEMO_APP_ID_SETTING if is_demo_mode() else FULL_APP_ID_SETTING, -1)
+## Returns the active Steam App ID based on current demo mode.
+static func get_active_app_id() -> String:
+	var setting := DEMO_APP_ID_SETTING if is_demo_mode() else FULL_APP_ID_SETTING
+	return str(ProjectSettings.get_setting(setting, ""))
 
 
-## Gets the appropriate Steam Depot ID based on current demo mode
-static func get_depot_id() -> int:
-	return ProjectSettings.get_setting(
-		DEMO_DEPOT_ID_SETTING if is_demo_mode() else FULL_DEPOT_ID_SETTING, -1)
+## Returns the active Steam Depot ID based on current demo mode.
+static func get_active_depot_id() -> String:
+	var setting := DEMO_DEPOT_ID_SETTING if is_demo_mode() else FULL_DEPOT_ID_SETTING
+	return str(ProjectSettings.get_setting(setting, ""))
 
 
-## Registers all required settings in Project Settings
-## Called during plugin initialization
-static func register_settings() -> void:
-	# Demo mode toggle
-	_add_setting(DEMO_MODE_SETTING, false, TYPE_BOOL, PROPERTY_HINT_NONE, "", 
-		"Demo Mode", "Toggles between demo and full game mode for testing")
-	
-	# Steam App IDs
-	_add_setting(FULL_APP_ID_SETTING, "", TYPE_INT, PROPERTY_HINT_NONE, "", 
-		"Full Game App ID", "Steam App ID for the full version of the game")
-	_add_setting(DEMO_APP_ID_SETTING, "", TYPE_INT, PROPERTY_HINT_NONE, "", 
-		"Demo App ID", "Steam App ID for the demo version of the game")
-	
-	# Steam Depot IDs
-	_add_setting(FULL_DEPOT_ID_SETTING, "", TYPE_INT, PROPERTY_HINT_NONE, "", 
-		"Full Game Depot ID", "Steam Depot ID for the full version of the game")
-	_add_setting(DEMO_DEPOT_ID_SETTING, "", TYPE_INT, PROPERTY_HINT_NONE, "", 
-		"Demo Depot ID", "Steam Depot ID for the demo version of the game")
-	
-	# Save the settings
-	ProjectSettings.save()
-
-
-## Helper to add a single setting to the Project Settings with appropriate metadata
-## Parameters:
-## - name: Project setting key
-## - default_value: Default value if not already set
-## - type: Type of setting (TYPE_BOOL, TYPE_STRING, etc.)
-## - hint: Property hint for editor display
-## - hint_string: Additional hint information
-## - custom_name: Display name in the editor
-## - description: Optional tooltip description for the setting
-static func _add_setting(name: String, default_value, type: int, hint: int = PROPERTY_HINT_NONE, 
-			hint_string: String = "", custom_name: String = "", description: String = "") -> void:
-	if !ProjectSettings.has_setting(name):
-		ProjectSettings.set_setting(name, default_value)
-		ProjectSettings.set_initial_value(name, default_value)
-		
-	# Set properties to make it show up in the project settings
-	var info = {
-		"name": name,
+## Adds a Project Settings entry with a default value and editor metadata.
+## Skips overwriting an existing value; always updates the initial value and
+## property info so the setting appears in the editor.
+static func _register_default(setting: String, default_value: Variant, type: int,
+		hint: int = PROPERTY_HINT_NONE, hint_string: String = "") -> void:
+	if not ProjectSettings.has_setting(setting):
+		ProjectSettings.set_setting(setting, default_value)
+	ProjectSettings.set_initial_value(setting, default_value)
+	ProjectSettings.add_property_info({
+		"name": setting,
 		"type": type,
 		"hint": hint,
-		"hint_string": hint_string
-	}
-	
-	# Use a custom name if provided (for better organization in the UI)
-	if custom_name != "":
-		info["class_name"] = custom_name
-	
-	# Add description if provided
-	if description != "":
-		info["description"] = description
-		
-	ProjectSettings.add_property_info(info)
+		"hint_string": hint_string,
+	})
