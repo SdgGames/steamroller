@@ -29,7 +29,7 @@ text = "SteamRoller Game Template"
 [node name="Version" type="Label" parent="V/Header" unique_id=1292519746]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Template 0.0.0.1"
+text = "Template 0.0.0.0"
 horizontal_alignment = 1
 
 [node name="DemoToggle" type="CheckButton" parent="V/Header" unique_id=871951652]

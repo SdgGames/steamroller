@@ -267,6 +267,8 @@ func execute_step(step: SteamRollerStep) -> bool:
 			ok = _reset_and_increment()
 		SteamRollerStep.Action.RUN_COMMAND:
 			ok = await _run_command(step)
+		SteamRollerStep.Action.RUN_STEPS:
+			ok = await _run_steps(step)
 		_:
 			log_error("Step has no executable action: %s" % str(step.action))
 	_active_step_id = ""
@@ -484,6 +486,31 @@ func _reset_all_tabs() -> void:
 	for sid in step_tab_index.keys():
 		completed[sid] = false
 		step_state_changed.emit(sid)
+
+
+func find_step(id: String) -> SteamRollerStep:
+	if config == null:
+		return null
+	for s in config.steps:
+		if s != null and s.id == id:
+			return s
+	return null
+
+
+func _run_steps(step: SteamRollerStep) -> bool:
+	var all_ok := true
+	for sid in step.step_ids:
+		var child := find_step(sid)
+		if child == null:
+			log_error("run_steps: unknown step id '%s'" % sid)
+			all_ok = false
+			continue
+		var child_ok := await execute_step(child)
+		if child_ok and not child.id.is_empty():
+			set_completed(child.id, true)
+		if not child_ok:
+			all_ok = false
+	return all_ok
 
 
 func _run_command(step: SteamRollerStep) -> bool:

@@ -40,6 +40,7 @@ func _ready() -> void:
 	_refresh_header()
 	_build_tabs()
 	_pin_instructions_tab()
+	tabs.current_tab = 0
 
 
 func _load_config() -> SteamRollerConfig:
@@ -91,9 +92,13 @@ func _build_tabs() -> void:
 			last_row = null
 			continue
 		if step.is_optional:
-			# Attach to the previous row's button flow if possible.
 			if last_row != null and last_row.has_button_flow():
-				last_row.attach_optional_button(step)
+				if step.new_button_row:
+					# Start a fresh HFlowContainer inside the existing row —
+					# no separator added to the list.
+					last_row.attach_new_button_line(step)
+				else:
+					last_row.attach_optional_button(step)
 				continue
 			# No suitable previous row — create an orphan button-only row.
 			# This handles the "first step in a tab is optional" case and

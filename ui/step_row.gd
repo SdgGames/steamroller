@@ -41,6 +41,19 @@ func attach_optional_button(optional_step: SteamRollerStep) -> void:
 	_button_flow.add_child(btn)
 
 
+## Start a new button line inside this row (no separator in the parent list).
+## Creates a second HFlowContainer and re-points _button_flow to it so that
+## subsequent attach_optional_button calls land on the new line.
+func attach_new_button_line(optional_step: SteamRollerStep) -> void:
+	var flow := HFlowContainer.new()
+	flow.alignment = HFlowContainer.ALIGNMENT_CENTER
+	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_child(flow)
+	_button_flow = flow
+	var btn := _make_button_for(optional_step)
+	flow.add_child(btn)
+
+
 # --- Setup -----------------------------------------------------------------
 
 func setup(p_step: SteamRollerStep, p_runner: SteamRollerRunner) -> void:

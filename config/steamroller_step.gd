@@ -45,6 +45,8 @@ enum Action {
 	RESET_AND_INCREMENT,
 	## External CLI command. Uses `executable`, `args`, `working_dir`.
 	RUN_COMMAND,
+	## Run other steps in sequence by `step_ids`. Used for "Push all" aggregates.
+	RUN_STEPS,
 }
 
 ## Stable identifier. Referenced by `depends_on` in other steps. Optional
@@ -79,6 +81,10 @@ enum Action {
 ## Use this for shortcuts like "Open build folder" or "Clear user data".
 @export var is_optional: bool = false
 
+## When true (and is_optional is also true), always starts a new button row
+## rather than appending to the previous row's flow container.
+@export var new_button_row: bool = false
+
 ## Action-specific parameters. String values pass through variable
 ## substitution before execution. See enum docs above for expected keys.
 @export var params: Dictionary = {}
@@ -110,6 +116,10 @@ enum Action {
 ## RUN_COMMAND: treat non-zero exit code as failure.
 @export var require_zero_exit: bool = true
 
+@export_group("Run Steps")
+## RUN_STEPS: ordered IDs of other steps to execute in sequence.
+@export var step_ids: PackedStringArray = []
+
 @export_group("New Tab")
 ## NEW_TAB: name for the new tab.
 @export var tab_name: String = ""
@@ -129,6 +139,7 @@ func get_default_button_label() -> String:
 		Action.COPY_TO_CLIPBOARD: return "Copy to clipboard"
 		Action.RESET_AND_INCREMENT: return "Reset and increment version"
 		Action.RUN_COMMAND: return "Run command"
+		Action.RUN_STEPS: return "Run all"
 		_: return ""
 
 
@@ -142,7 +153,8 @@ func produces_output() -> bool:
 	match action:
 		Action.RUN_GDUNIT, Action.RECORD_MOVIE, Action.DELETE_FOLDER, \
 		Action.CREATE_FOLDERS, Action.ARCHIVE_FOLDER, Action.CLEAR_USER_DATA, \
-		Action.COPY_TO_CLIPBOARD, Action.RESET_AND_INCREMENT, Action.RUN_COMMAND:
+		Action.COPY_TO_CLIPBOARD, Action.RESET_AND_INCREMENT, Action.RUN_COMMAND, \
+		Action.RUN_STEPS:
 			return true
 		_:
 			return false

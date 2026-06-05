@@ -27,6 +27,7 @@ determines its behavior. The available actions:
 | `COPY_TO_CLIPBOARD` | Copy `params.text` to the clipboard. |
 | `RESET_AND_INCREMENT` | Reset current tab + bump last numeric segment of version. |
 | `RUN_COMMAND` | External process using `executable`, `args`, `working_dir`. |
+| `RUN_STEPS` | Run other steps in sequence via `step_ids` (e.g. "Push all"). |
 
 In the panel, each step renders as:
 
@@ -68,8 +69,9 @@ due to Steamworks SDK licensing.
    `steamworks_sdk/tools/ContentBuilder/scripts/app_<APP_ID>.vdf`.
 4. Run `steamcmd.exe` once manually to cache login credentials.
 
-The default config ships with `STEAM_APP_ID = 480` (Valve's public SpaceWar
-test app) so you can dry-run without a real product on Steam.
+The default config ships with `STEAM_APP_ID_DEMO` and `STEAM_APP_ID_FULL`
+both set to `480` (Valve's public SpaceWar test app) so you can dry-run
+without a real product on Steam.
 
 ## First push to Steam
 
@@ -117,3 +119,34 @@ count:
 
 Use whatever your platform needs (Windows resource versions want 4 segments,
 others can use fewer).
+
+## Push builds section
+
+The template config demonstrates separate **demo** and **full** exports
+(`Windows_Demo` / `Linux_Demo` → `builds/latest/demo_depot`, `Windows_Final` /
+`Linux_Final` → `game_depot`, `Web` → `web`). In the Release tab, a
+`CHECKBOX` header step (`push_builds`) introduces the section; individual
+push endpoints and aggregate buttons are marked `is_optional = true` so they
+share one button row:
+
+- **Push all** — runs every endpoint step in order (`RUN_STEPS` + `step_ids`)
+- **Push all demo** — demo Steam + demo Itch
+- **Push all release** — game Steam + web Itch + game Itch
+- Per-endpoint buttons — each `RUN_COMMAND` step with its own `id`
+
+Define endpoint steps once, then reference their IDs from aggregate steps:
+
+```gdscript
+# RUN_STEPS aggregate (is_optional = true, button_label = "Push all")
+step_ids = ["push_demo_steam", "push_game_steam", "push_demo_itch", ...]
+```
+
+`push_all_demo` and `push_all_release` are normal checklist rows (not
+optional): they gate on `build_complete` and tick their own checkbox when
+their button finishes. The optional **Push all** shortcut runs every ID in
+its `step_ids` list and marks each child step complete on success — so a
+minimal config with only two non-optional `RUN_COMMAND` endpoints plus
+**Push all** still runs and checks off both from one click.
+
+Optional per-endpoint push buttons are always enabled. Child step output
+appears in the Godot Output panel.
