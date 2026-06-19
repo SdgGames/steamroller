@@ -47,6 +47,13 @@ enum Action {
 	RUN_COMMAND,
 	## Run other steps in sequence by `step_ids`. Used for "Push all" aggregates.
 	RUN_STEPS,
+	## Write the Steam `desc` field in one or more app VDF files, and
+	## optionally the `setlive` branch when `branch` is provided.
+	## params: { "files": Array[String], "desc": String, "branch": String (optional) }
+	WRITE_VDF_DESC,
+	## Export the project using the Godot headless CLI for each preset entry.
+	## params: { "exports": Array[Dictionary] } where each entry is { "preset": String, "output": String }
+	EXPORT_PROJECT,
 }
 
 ## Stable identifier. Referenced by `depends_on` in other steps. Optional
@@ -140,6 +147,8 @@ func get_default_button_label() -> String:
 		Action.RESET_AND_INCREMENT: return "Reset and increment version"
 		Action.RUN_COMMAND: return "Run command"
 		Action.RUN_STEPS: return "Run all"
+		Action.WRITE_VDF_DESC: return "Write VDF description"
+		Action.EXPORT_PROJECT: return "Export project"
 		_: return ""
 
 
@@ -154,7 +163,7 @@ func produces_output() -> bool:
 		Action.RUN_GDUNIT, Action.RECORD_MOVIE, Action.DELETE_FOLDER, \
 		Action.CREATE_FOLDERS, Action.ARCHIVE_FOLDER, Action.CLEAR_USER_DATA, \
 		Action.COPY_TO_CLIPBOARD, Action.RESET_AND_INCREMENT, Action.RUN_COMMAND, \
-		Action.RUN_STEPS:
+		Action.RUN_STEPS, Action.WRITE_VDF_DESC, Action.EXPORT_PROJECT:
 			return true
 		_:
 			return false

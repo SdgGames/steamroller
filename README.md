@@ -28,6 +28,8 @@ determines its behavior. The available actions:
 | `RESET_AND_INCREMENT` | Reset current tab + bump last numeric segment of version. |
 | `RUN_COMMAND` | External process using `executable`, `args`, `working_dir`. |
 | `RUN_STEPS` | Run other steps in sequence via `step_ids` (e.g. "Push all"). |
+| `WRITE_VDF_DESC` | Update the `desc` field (and optionally the `setlive` branch) in one or more Valve VDF app-build scripts. `params.files` is an Array of absolute paths; `params.desc` is the string to write; `params.branch` (optional) sets the `setlive` branch. All support variable substitution. |
+| `EXPORT_PROJECT` | Export the project headlessly for each preset. `params.exports` is an Array of `{preset: String, output: String}` dicts. Relaunches the current editor binary with `--headless --export-release`. |
 
 In the panel, each step renders as:
 
@@ -69,6 +71,28 @@ due to Steamworks SDK licensing.
    `steamworks_sdk/tools/ContentBuilder/scripts/app_<APP_ID>.vdf`.
 4. Run `steamcmd.exe` once manually to cache login credentials.
 
+The `WRITE_VDF_DESC` step automatically updates the `desc` field before each push,
+so the Steam build history is labelled with the correct version and message. Pass
+`params.branch` to also set the `setlive` branch (the release branch builds go live on).
+Add it before your push steps with `params = {"files": ["${VDF_DIR}/app_${STEAM_APP_ID_FULL}.vdf", ...], "desc": "(${VERSION}) ${COMMIT_MESSAGE}", "branch": "${STEAM_BRANCH}"}`.
+
+The branch comes from a persisted text input bound to the
+`application/steamroller/steam_branch` setting and exposed as the `${STEAM_BRANCH}`
+variable, so the default (e.g. `beta`) carries across builds and can be edited per release.
+
+### Automated export
+
+The `EXPORT_PROJECT` step relaunches the current Godot editor binary with
+`--headless --export-release` to build each preset in turn. This requires
+export templates to be installed. Configure it with:
+
+```gdscript
+params = {"exports": [
+  {"preset": "Windows Desktop", "output": "${BUILDS_DIR}/latest/game_depot/game.exe"},
+  {"preset": "Linux/X11",       "output": "${BUILDS_DIR}/latest/game_depot/game.x86_64"},
+]}
+```
+
 The default config ships with `STEAM_APP_ID_DEMO` and `STEAM_APP_ID_FULL`
 both set to `480` (Valve's public SpaceWar test app) so you can dry-run
 without a real product on Steam.
@@ -98,7 +122,9 @@ User-defined variables live in `config.variables`. Built-ins always available:
 
 - `${VERSION}` — `application/config/version`
 - `${APP_NAME}` — `application/config/name`
-- `${COMMIT_MESSAGE}` — `application/config/commit_message`
+- `${COMMIT_MESSAGE}` — `application/config/commit_message` (raw, with spaces — use in git commit messages and VDF descriptions)
+- `${COMMIT_MESSAGE_SLUG}` — same value with spaces replaced by underscores (use in folder/archive names)
+- `${STEAM_BRANCH}` — `application/steamroller/steam_branch` (the `setlive` branch for VDF pushes)
 - `${DEMO_MODE}` — `"true"` or `"false"`
 - `${USER_DIR}` — globalized `user://`
 - `${PROJECT_DIR}` — globalized `res://` (trailing slash included)

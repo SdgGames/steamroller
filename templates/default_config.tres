@@ -30,6 +30,20 @@ placeholder = "What changed?"
 args = PackedStringArray()
 step_ids = PackedStringArray()
 
+[sub_resource type="Resource" id="s_branch"]
+script = ExtResource("2_step")
+id = "steam_branch"
+action = 2
+display_name = "Steam Branch"
+description = "[i]Default Steam branch to release on. Written to [code]setlive[/code] in the app VDF scripts.[/i]"
+depends_on = PackedStringArray()
+target_variable = "STEAM_BRANCH"
+project_setting_path = "application/steamroller/steam_branch"
+default_value = "default"
+placeholder = "default"
+args = PackedStringArray()
+step_ids = PackedStringArray()
+
 [sub_resource type="Resource" id="s_tests"]
 script = ExtResource("2_step")
 id = "tests"
@@ -79,9 +93,13 @@ step_ids = PackedStringArray()
 [sub_resource type="Resource" id="s_export"]
 script = ExtResource("2_step")
 id = "export_reminder"
-display_name = "Export the game from Godot (Project → Export → Export All)."
-description = "Run all platform exports into [color=cyan]${BUILDS_DIR}/latest/[/color]."
+action = 15
+display_name = "Export all platforms."
+description = "Runs the Godot headless CLI to export all presets into [color=cyan]${BUILDS_DIR}/latest/[/color]. Add your preset names and output paths to [code]params.exports[/code]."
 depends_on = PackedStringArray("delete_build")
+params = {
+"exports": []
+}
 args = PackedStringArray()
 step_ids = PackedStringArray()
 
@@ -104,10 +122,10 @@ script = ExtResource("2_step")
 id = "archive"
 action = 7
 display_name = "Archive this build for future reference."
-description = "Copies [color=cyan]${BUILDS_DIR}/latest[/color] → [color=cyan]${BUILDS_DIR}/${VERSION}_${COMMIT_MESSAGE}[/color]."
+description = "Copies [color=cyan]${BUILDS_DIR}/latest[/color] → [color=cyan]${BUILDS_DIR}/${VERSION}_${COMMIT_MESSAGE_SLUG}[/color]."
 depends_on = PackedStringArray("movie")
 params = {
-"destination": "${BUILDS_DIR}/${VERSION}_${COMMIT_MESSAGE}",
+"destination": "${BUILDS_DIR}/${VERSION}_${COMMIT_MESSAGE_SLUG}",
 "source": "${BUILDS_DIR}/latest"
 }
 args = PackedStringArray()
@@ -164,14 +182,16 @@ step_ids = PackedStringArray()
 
 [sub_resource type="Resource" id="s_open_vdf"]
 script = ExtResource("2_step")
-id = "open_vdf"
-action = 9
-display_name = "Update the build description in the VDF script."
-description = "[i]TODO: replace this with automated VDF editing.[/i] For now, edit the [code]desc[/code] field in [code]app_${STEAM_APP_ID_DEMO}.vdf[/code] and [code]app_${STEAM_APP_ID_FULL}.vdf[/code] so Steam builds are labelled correctly."
+id = "write_vdf_desc"
+action = 14
+display_name = "Write the build description into the Steam VDF scripts."
+description = "Sets [code]desc[/code] to [color=cyan](${VERSION}) ${COMMIT_MESSAGE}[/color] and [code]setlive[/code] to [color=cyan]${STEAM_BRANCH}[/color] in [color=cyan]app_${STEAM_APP_ID_DEMO}.vdf[/color] and [color=cyan]app_${STEAM_APP_ID_FULL}.vdf[/color]."
 depends_on = PackedStringArray("build_complete")
-button_label = "Open VDF scripts folder"
+button_label = "Write VDF description"
 params = {
-"path": "${VDF_DIR}"
+"branch": "${STEAM_BRANCH}",
+"desc": "(${VERSION}) ${COMMIT_MESSAGE}",
+"files": ["${VDF_DIR}/app_${STEAM_APP_ID_DEMO}.vdf", "${VDF_DIR}/app_${STEAM_APP_ID_FULL}.vdf"]
 }
 args = PackedStringArray()
 step_ids = PackedStringArray()
@@ -181,7 +201,7 @@ script = ExtResource("2_step")
 id = "push_builds"
 display_name = "Push the build to your storefronts."
 description = "Demo exports land in [color=cyan]${BUILDS_DIR}/latest/demo_depot[/color] ([i]Windows_Demo[/i], [i]Linux_Demo[/i]). Full game in [color=cyan]game_depot[/color], web in [color=cyan]web[/color]. Use individual buttons or Push all / Push all demo / Push all release."
-depends_on = PackedStringArray("build_complete")
+depends_on = PackedStringArray("write_vdf_desc")
 args = PackedStringArray()
 step_ids = PackedStringArray()
 
@@ -200,7 +220,7 @@ script = ExtResource("2_step")
 id = "push_all_demo"
 action = 13
 display_name = "Push all demo builds to Steam and Itch."
-depends_on = PackedStringArray("build_complete")
+depends_on = PackedStringArray("write_vdf_desc")
 button_label = "Push all Demo Builds"
 args = PackedStringArray()
 step_ids = PackedStringArray("push_demo_steam", "push_demo_itch")
@@ -244,7 +264,7 @@ script = ExtResource("2_step")
 id = "push_all_release"
 action = 13
 display_name = "Push all release builds to Steam and Itch."
-depends_on = PackedStringArray("build_complete")
+depends_on = PackedStringArray("write_vdf_desc")
 button_label = "Push all Release Builds"
 args = PackedStringArray()
 step_ids = PackedStringArray("push_game_steam", "push_web_itch", "push_game_itch")
@@ -286,4 +306,4 @@ variables = {
 "STEAM_USER": "",
 "VDF_DIR": "${PROJECT_DIR}../steamworks_sdk/tools/ContentBuilder/scripts"
 }
-steps = [SubResource("s_version"), SubResource("s_commit"), SubResource("s_tests"), SubResource("s_delete"), SubResource("s_clear_user"), SubResource("s_open_build"), SubResource("s_export"), SubResource("s_movie"), SubResource("s_archive"), SubResource("s_open_build"), SubResource("s_review"), SubResource("s_copy"), SubResource("s_reset"), SubResource("s_release_tab"), SubResource("s_build_ok"), SubResource("s_open_vdf"), SubResource("s_push_builds"), SubResource("s_push_all"), SubResource("s_push_all_demo"), SubResource("s_push_demo_steam"), SubResource("s_push_demo_itch"), SubResource("s_push_web_itch"), SubResource("s_push_all_release"), SubResource("s_push_game_steam"), SubResource("s_push_game_itch"), SubResource("s_reset")]
+steps = [SubResource("s_version"), SubResource("s_commit"), SubResource("s_branch"), SubResource("s_tests"), SubResource("s_delete"), SubResource("s_clear_user"), SubResource("s_open_build"), SubResource("s_export"), SubResource("s_movie"), SubResource("s_archive"), SubResource("s_open_build"), SubResource("s_review"), SubResource("s_copy"), SubResource("s_reset"), SubResource("s_release_tab"), SubResource("s_build_ok"), SubResource("s_open_vdf"), SubResource("s_push_builds"), SubResource("s_push_all"), SubResource("s_push_all_demo"), SubResource("s_push_demo_steam"), SubResource("s_push_demo_itch"), SubResource("s_push_web_itch"), SubResource("s_push_all_release"), SubResource("s_push_game_steam"), SubResource("s_push_game_itch"), SubResource("s_reset")]

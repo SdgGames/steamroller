@@ -56,7 +56,10 @@ func rebuild_variables() -> void:
 	# Built-in dynamic variables, computed fresh each rebuild.
 	variables["VERSION"] = str(ProjectSettings.get_setting("application/config/version", ""))
 	variables["APP_NAME"] = str(ProjectSettings.get_setting("application/config/name", ""))
-	variables["COMMIT_MESSAGE"] = str(ProjectSettings.get_setting("application/config/commit_message", "")).replace(" ", "_")
+	var _raw_commit: String = str(ProjectSettings.get_setting("application/config/commit_message", ""))
+	variables["COMMIT_MESSAGE"] = _raw_commit
+	variables["COMMIT_MESSAGE_SLUG"] = _raw_commit.replace(" ", "_")
+	variables["STEAM_BRANCH"] = str(ProjectSettings.get_setting("application/steamroller/steam_branch", ""))
 	variables["DEMO_MODE"] = "true" if _get_demo_mode() else "false"
 	variables["USER_DIR"] = ProjectSettings.globalize_path("user://")
 	variables["PROJECT_DIR"] = ProjectSettings.globalize_path("res://")
@@ -269,6 +272,10 @@ func execute_step(step: SteamRollerStep) -> bool:
 			ok = await _run_command(step)
 		SteamRollerStep.Action.RUN_STEPS:
 			ok = await _run_steps(step)
+		SteamRollerStep.Action.WRITE_VDF_DESC:
+			ok = _write_vdf_desc(resolved)
+		SteamRollerStep.Action.EXPORT_PROJECT:
+			ok = await _export_project(resolved)
 		_:
 			log_error("Step has no executable action: %s" % str(step.action))
 	_active_step_id = ""
@@ -460,6 +467,7 @@ func _reset_and_increment() -> bool:
 	ProjectSettings.save()
 	variables["VERSION"] = bumped
 	variables["COMMIT_MESSAGE"] = ""
+	variables["COMMIT_MESSAGE_SLUG"] = ""
 	variables_changed.emit()
 	log_line("Version: %s → %s" % [current, bumped])
 	step_input_set.emit("version", bumped)
@@ -549,3 +557,89 @@ static func _quote_args(args: PackedStringArray) -> PackedStringArray:
 		else:
 			out.append(a)
 	return out
+
+
+func _write_vdf_desc(p: Dictionary) -> bool:
+	var files: Array = p.get("files", [])
+	var desc: String = p.get("desc", "")
+	var branch: String = p.get("branch", "")
+	if files.is_empty():
+		log_error("write_vdf_desc: missing 'files'.")
+		return false
+	if desc.is_empty():
+		log_error("write_vdf_desc: missing 'desc'.")
+		return false
+	var desc_regex := RegEx.new()
+	desc_regex.compile(r'"desc"\s+"[^"]*"')
+	var setlive_regex := RegEx.new()
+	setlive_regex.compile(r'"setlive"\s+"[^"]*"')
+	var all_ok := true
+	for raw_path in files:
+		var path: String = ProjectSettings.globalize_path(str(raw_path))
+		var fa := FileAccess.open(path, FileAccess.READ)
+		if fa == null:
+			log_error("write_vdf_desc: cannot open %s (error %s)" % [path, str(FileAccess.get_open_error())])
+			all_ok = false
+			continue
+		var content: String = fa.get_as_text()
+		fa.close()
+		var replacement := '"desc"\t"%s"' % desc
+		var updated: String = desc_regex.sub(content, replacement)
+		if updated == content:
+			log_error("write_vdf_desc: 'desc' key not found in %s" % path)
+			all_ok = false
+			continue
+		if not branch.is_empty():
+			var setlive_replacement := '"setlive"\t"%s"' % branch
+			var with_branch: String = setlive_regex.sub(updated, setlive_replacement)
+			if with_branch == updated:
+				log_error("write_vdf_desc: 'setlive' key not found in %s" % path)
+				all_ok = false
+				continue
+			updated = with_branch
+		var fw := FileAccess.open(path, FileAccess.WRITE)
+		if fw == null:
+			log_error("write_vdf_desc: cannot write %s (error %s)" % [path, str(FileAccess.get_open_error())])
+			all_ok = false
+			continue
+		fw.store_string(updated)
+		fw.close()
+		if branch.is_empty():
+			log_line("Updated desc in %s → \"%s\"" % [path, desc])
+		else:
+			log_line("Updated %s → desc \"%s\", setlive \"%s\"" % [path, desc, branch])
+	return all_ok
+
+
+func _export_project(p: Dictionary) -> bool:
+	var exports: Array = p.get("exports", [])
+	if exports.is_empty():
+		log_error("export_project: missing 'exports'.")
+		return false
+	var godot_exe: String = OS.get_executable_path()
+	var project_path: String = ProjectSettings.globalize_path("res://")
+	var all_ok := true
+	for entry in exports:
+		var preset: String = str(entry.get("preset", ""))
+		var output: String = ProjectSettings.globalize_path(str(entry.get("output", "")))
+		if preset.is_empty() or output.is_empty():
+			log_error("export_project: each entry needs 'preset' and 'output'.")
+			all_ok = false
+			continue
+		log_line("Exporting preset '%s' → %s" % [preset, output])
+		var pid := OS.create_process(godot_exe, [
+			"--headless", "--path", project_path,
+			"--export-release", preset, output
+		], true)
+		if pid <= 0:
+			log_error("export_project: failed to start process for preset '%s'." % preset)
+			all_ok = false
+			continue
+		while OS.is_process_running(pid):
+			await get_tree().create_timer(1.0).timeout
+		var exit_code := OS.get_process_exit_code(pid)
+		log_line("Preset '%s' exit code: %s" % [preset, str(exit_code)])
+		if exit_code != 0:
+			log_error("export_project: preset '%s' failed (exit %s)." % [preset, str(exit_code)])
+			all_ok = false
+	return all_ok
