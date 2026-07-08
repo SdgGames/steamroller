@@ -58,7 +58,7 @@ func rebuild_variables() -> void:
 	variables["APP_NAME"] = str(ProjectSettings.get_setting("application/config/name", ""))
 	var _raw_commit: String = str(ProjectSettings.get_setting("application/config/commit_message", ""))
 	variables["COMMIT_MESSAGE"] = _raw_commit
-	variables["COMMIT_MESSAGE_SLUG"] = _raw_commit.replace(" ", "_")
+	variables["COMMIT_MESSAGE_SLUG"] = _raw_commit.replace(" ", "_").to_lower()
 	variables["STEAM_BRANCH"] = str(ProjectSettings.get_setting("application/steamroller/steam_branch", ""))
 	variables["DEMO_MODE"] = "true" if _get_demo_mode() else "false"
 	variables["USER_DIR"] = ProjectSettings.globalize_path("user://")
