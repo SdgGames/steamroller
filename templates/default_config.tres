@@ -44,16 +44,6 @@ placeholder = "default"
 args = PackedStringArray()
 step_ids = PackedStringArray()
 
-[sub_resource type="Resource" id="s_tests"]
-script = ExtResource("2_step")
-id = "tests"
-action = 3
-display_name = "Run the unit tests for this change. Ensure they pass."
-description = "Run all [color=cyan]GdUnit4[/color] tests. Disabled if GdUnit is not installed."
-depends_on = PackedStringArray("commit_message")
-args = PackedStringArray()
-step_ids = PackedStringArray()
-
 [sub_resource type="Resource" id="s_delete"]
 script = ExtResource("2_step")
 id = "delete_build"
@@ -66,6 +56,16 @@ params = {
 "path": "${BUILDS_DIR}/latest",
 "paths": ["${BUILDS_DIR}/latest", "${BUILDS_DIR}/latest/game_depot", "${BUILDS_DIR}/latest/demo_depot", "${BUILDS_DIR}/latest/web"]
 }
+args = PackedStringArray()
+step_ids = PackedStringArray()
+
+[sub_resource type="Resource" id="s_tests"]
+script = ExtResource("2_step")
+id = "tests"
+action = 3
+display_name = "Run the unit tests for this change. Ensure they pass."
+description = "Run all [color=cyan]GdUnit4[/color] tests. Disabled if GdUnit is not installed."
+depends_on = PackedStringArray("commit_message")
 args = PackedStringArray()
 step_ids = PackedStringArray()
 
@@ -306,4 +306,4 @@ variables = {
 "STEAM_USER": "",
 "VDF_DIR": "${PROJECT_DIR}../steamworks_sdk/tools/ContentBuilder/scripts"
 }
-steps = [SubResource("s_version"), SubResource("s_commit"), SubResource("s_branch"), SubResource("s_tests"), SubResource("s_delete"), SubResource("s_clear_user"), SubResource("s_open_build"), SubResource("s_export"), SubResource("s_movie"), SubResource("s_archive"), SubResource("s_open_build"), SubResource("s_review"), SubResource("s_copy"), SubResource("s_reset"), SubResource("s_release_tab"), SubResource("s_build_ok"), SubResource("s_open_vdf"), SubResource("s_push_builds"), SubResource("s_push_all"), SubResource("s_push_all_demo"), SubResource("s_push_demo_steam"), SubResource("s_push_demo_itch"), SubResource("s_push_web_itch"), SubResource("s_push_all_release"), SubResource("s_push_game_steam"), SubResource("s_push_game_itch"), SubResource("s_reset")]
+steps = [SubResource("s_version"), SubResource("s_commit"), SubResource("s_branch"), SubResource("s_delete"), SubResource("s_tests"), SubResource("s_clear_user"), SubResource("s_open_build"), SubResource("s_export"), SubResource("s_movie"), SubResource("s_archive"), SubResource("s_open_build"), SubResource("s_review"), SubResource("s_copy"), SubResource("s_reset"), SubResource("s_release_tab"), SubResource("s_build_ok"), SubResource("s_open_vdf"), SubResource("s_push_builds"), SubResource("s_push_all"), SubResource("s_push_all_demo"), SubResource("s_push_demo_steam"), SubResource("s_push_demo_itch"), SubResource("s_push_web_itch"), SubResource("s_push_all_release"), SubResource("s_push_game_steam"), SubResource("s_push_game_itch"), SubResource("s_reset")]
