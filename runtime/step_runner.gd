@@ -583,20 +583,19 @@ func _write_vdf_desc(p: Dictionary) -> bool:
 			continue
 		var content: String = fa.get_as_text()
 		fa.close()
-		var replacement := '"desc"\t"%s"' % desc
-		var updated: String = desc_regex.sub(content, replacement)
-		if updated == content:
+		if desc_regex.search(content) == null:
 			log_error("write_vdf_desc: 'desc' key not found in %s" % path)
 			all_ok = false
 			continue
+		var replacement := '"desc"\t"%s"' % desc
+		var updated: String = desc_regex.sub(content, replacement)
 		if not branch.is_empty():
-			var setlive_replacement := '"setlive"\t"%s"' % branch
-			var with_branch: String = setlive_regex.sub(updated, setlive_replacement)
-			if with_branch == updated:
+			if setlive_regex.search(updated) == null:
 				log_error("write_vdf_desc: 'setlive' key not found in %s" % path)
 				all_ok = false
 				continue
-			updated = with_branch
+			var setlive_replacement := '"setlive"\t"%s"' % branch
+			updated = setlive_regex.sub(updated, setlive_replacement)
 		var fw := FileAccess.open(path, FileAccess.WRITE)
 		if fw == null:
 			log_error("write_vdf_desc: cannot write %s (error %s)" % [path, str(FileAccess.get_open_error())])
