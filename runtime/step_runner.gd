@@ -64,6 +64,7 @@ func rebuild_variables() -> void:
 	variables["USER_DIR"] = ProjectSettings.globalize_path("user://")
 	variables["PROJECT_DIR"] = ProjectSettings.globalize_path("res://")
 	variables["PLATFORM"] = OS.get_name()
+	variables["GODOT_EXE"] = OS.get_executable_path()
 	variables_changed.emit()
 
 
@@ -270,6 +271,8 @@ func execute_step(step: SteamRollerStep) -> bool:
 			ok = _reset_and_increment()
 		SteamRollerStep.Action.RUN_COMMAND:
 			ok = await _run_command(step)
+		SteamRollerStep.Action.RUN_COMMAND_ASYNC:
+			ok = await _run_command_async(step, resolved)
 		SteamRollerStep.Action.RUN_STEPS:
 			ok = await _run_steps(step)
 		SteamRollerStep.Action.WRITE_VDF_DESC:
@@ -545,6 +548,36 @@ func _run_command(step: SteamRollerStep) -> bool:
 				log_line(sub)
 	log_line("Exit code: %s" % str(ec))
 	if step.require_zero_exit and ec != 0:
+		return false
+	return true
+
+
+## Non-blocking variant of _run_command: spawns the process detached and polls
+## for exit so long-running commands (benchmarks, tools) don't freeze the editor.
+## Optional params["tail_file"] is read after exit and logged to the step console.
+func _run_command_async(step: SteamRollerStep, p: Dictionary) -> bool:
+	var exe := resolve(step.executable)
+	var resolved_args := resolve_args(step.args)
+	log_line("Running (async): %s %s" % [exe, " ".join(resolved_args)])
+	var pid := OS.create_process(exe, resolved_args, true)
+	if pid <= 0:
+		log_error("run_command_async: failed to start '%s'." % exe)
+		return false
+	while OS.is_process_running(pid):
+		await get_tree().create_timer(1.0).timeout
+	var ec := OS.get_process_exit_code(pid)
+	log_line("Exit code: %s" % str(ec))
+	var tail_file: String = str(p.get("tail_file", ""))
+	if not tail_file.is_empty():
+		var fa := FileAccess.open(tail_file, FileAccess.READ)
+		if fa == null:
+			log_error("run_command_async: cannot read tail_file %s" % tail_file)
+		else:
+			for line in fa.get_as_text().split("\n"):
+				if not line.strip_edges().is_empty():
+					log_line(line)
+	if step.require_zero_exit and ec != 0:
+		log_error("run_command_async: '%s' failed (exit %s)." % [exe, str(ec)])
 		return false
 	return true
 

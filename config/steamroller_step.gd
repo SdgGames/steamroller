@@ -54,6 +54,11 @@ enum Action {
 	## Export the project using the Godot headless CLI for each preset entry.
 	## params: { "exports": Array[Dictionary] } where each entry is { "preset": String, "output": String }
 	EXPORT_PROJECT,
+	## External CLI command run without blocking the editor (create_process +
+	## exit-code poll). Uses `executable`, `args`; `working_dir` is ignored.
+	## params: { "tail_file": String (optional) } — file whose contents are
+	## logged to the step console after the process exits.
+	RUN_COMMAND_ASYNC,
 }
 
 ## Stable identifier. Referenced by `depends_on` in other steps. Optional
@@ -146,6 +151,7 @@ func get_default_button_label() -> String:
 		Action.COPY_TO_CLIPBOARD: return "Copy to clipboard"
 		Action.RESET_AND_INCREMENT: return "Reset and increment version"
 		Action.RUN_COMMAND: return "Run command"
+		Action.RUN_COMMAND_ASYNC: return "Run command"
 		Action.RUN_STEPS: return "Run all"
 		Action.WRITE_VDF_DESC: return "Write VDF description"
 		Action.EXPORT_PROJECT: return "Export project"
@@ -163,7 +169,8 @@ func produces_output() -> bool:
 		Action.RUN_GDUNIT, Action.RECORD_MOVIE, Action.DELETE_FOLDER, \
 		Action.CREATE_FOLDERS, Action.ARCHIVE_FOLDER, Action.CLEAR_USER_DATA, \
 		Action.COPY_TO_CLIPBOARD, Action.RESET_AND_INCREMENT, Action.RUN_COMMAND, \
-		Action.RUN_STEPS, Action.WRITE_VDF_DESC, Action.EXPORT_PROJECT:
+		Action.RUN_STEPS, Action.WRITE_VDF_DESC, Action.EXPORT_PROJECT, \
+		Action.RUN_COMMAND_ASYNC:
 			return true
 		_:
 			return false
