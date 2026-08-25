@@ -117,15 +117,11 @@ func setup(p_step: SteamRollerStep, p_runner: SteamRollerRunner) -> void:
 # --- Header builders -------------------------------------------------------
 
 func _build_checkbox_header() -> void:
-	var hbox := HBoxContainer.new()
-	add_child(hbox)
 	_checkbox = CheckBox.new()
+	_checkbox.text = step.display_name
+	_checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_checkbox.toggled.connect(_on_checkbox_toggled)
-	hbox.add_child(_checkbox)
-	var label := Label.new()
-	label.text = step.display_name
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hbox.add_child(label)
+	add_child(_checkbox)
 
 
 func _build_input_header() -> void:
