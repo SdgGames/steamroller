@@ -95,7 +95,7 @@ script = ExtResource("2_step")
 id = "export_reminder"
 action = 15
 display_name = "Export all platforms."
-description = "Runs the Godot headless CLI to export all presets into [color=cyan]${BUILDS_DIR}/latest/[/color]. Add your preset names and output paths to [code]params.exports[/code]."
+description = "Runs the Godot headless CLI over [i]every[/i] preset in [color=cyan]export_presets.cfg[/color], each to its own export path — the same list the editor's [i]Export All[/i] button walks. [b]Debug and Release write to the same paths[/b], so whichever ran last is what is on disk. Set [code]params.exports[/code] only to override that list with explicit preset/output pairs."
 depends_on = PackedStringArray("delete_build")
 params = {
 "exports": []

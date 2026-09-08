@@ -26,10 +26,11 @@ determines its behavior. The available actions:
 | `OPEN_IN_EXPLORER` | Reveal `params.path` in the OS file manager. |
 | `COPY_TO_CLIPBOARD` | Copy `params.text` to the clipboard. |
 | `RESET_AND_INCREMENT` | Reset current tab + bump last numeric segment of version. |
-| `RUN_COMMAND` | External process using `executable`, `args`, `working_dir`. |
-| `RUN_STEPS` | Run other steps in sequence via `step_ids` (e.g. "Push all"). |
+| `RUN_COMMAND` | External process using `executable`, `args`, `working_dir`. Runs without blocking the editor; its captured output is written to a log file and emitted into the step console. |
+| `RUN_STEPS` | Run other steps in sequence via `step_ids` (e.g. "Push all"). Output from every child is routed to the console of the row you pressed. |
 | `WRITE_VDF_DESC` | Update the `desc` field (and optionally the `setlive` branch) in one or more Valve VDF app-build scripts. `params.files` is an Array of absolute paths; `params.desc` is the string to write; `params.branch` (optional) sets the `setlive` branch. All support variable substitution. |
-| `EXPORT_PROJECT` | Export the project headlessly for each preset. `params.exports` is an Array of `{preset: String, output: String}` dicts. Relaunches the current editor binary with `--headless --export-release`. |
+| `EXPORT_PROJECT` | Export the project headlessly, mirroring the editor's **Export All**: renders an *Export All Debug* and an *Export All Release* button and exports every preset in `export_presets.cfg` to its own `export_path`. Relaunches the current editor binary with `--headless` and `--export-debug`/`--export-release`. `params.debug` (bool) pins one mode and renders a single button; `params.exports` (Array of `{preset, output}`) overrides the preset list. |
+| `RUN_COMMAND_ASYNC` | **Deprecated** — `RUN_COMMAND` no longer blocks either, and additionally captures output and honours `working_dir`. Kept for configs relying on this action's exact contract: no shell, `working_dir` ignored, output only via `params.tail_file` (now tailed incrementally while the process runs, rather than dumped at exit). |
 
 In the panel, each step renders as:
 
@@ -82,16 +83,32 @@ variable, so the default (e.g. `beta`) carries across builds and can be edited p
 
 ### Automated export
 
-The `EXPORT_PROJECT` step relaunches the current Godot editor binary with
-`--headless --export-release` to build each preset in turn. This requires
-export templates to be installed. Configure it with:
+The `EXPORT_PROJECT` step mirrors the editor's **Export All** button. It renders
+two buttons — **Export All Debug** and **Export All Release** — and each
+relaunches the current Godot editor binary with `--headless` plus
+`--export-debug` or `--export-release`, once per preset, in sequence. This
+requires export templates to be installed.
+
+By default it needs no configuration at all: every preset in
+`export_presets.cfg` is exported to its own `export_path`, in file order.
+Missing output folders are created. Note that Debug and Release share those
+paths, so the last export you ran is the one on disk.
+
+To pin a single mode (one button instead of two), or to export a hand-picked
+list to paths of your own:
 
 ```gdscript
-params = {"exports": [
-  {"preset": "Windows Desktop", "output": "${BUILDS_DIR}/latest/game_depot/game.exe"},
-  {"preset": "Linux/X11",       "output": "${BUILDS_DIR}/latest/game_depot/game.x86_64"},
-]}
+params = {
+  "debug": false,                 # optional: one button, always Release
+  "exports": [                    # optional: overrides export_presets.cfg
+    {"preset": "Windows Desktop", "output": "${BUILDS_DIR}/latest/game_depot/game.exe"},
+    {"preset": "Linux/X11",       "output": "${BUILDS_DIR}/latest/game_depot/game.x86_64"},
+  ],
+}
 ```
+
+Once an export completes, both buttons stay disabled until **Reset and
+increment version** restarts the checklist.
 
 The default config ships with `STEAM_APP_ID_DEMO` and `STEAM_APP_ID_FULL`
 both set to `480` (Valve's public SpaceWar test app) so you can dry-run
@@ -174,5 +191,32 @@ its `step_ids` list and marks each child step complete on success — so a
 minimal config with only two non-optional `RUN_COMMAND` endpoints plus
 **Push all** still runs and checks off both from one click.
 
-Optional per-endpoint push buttons are always enabled. Child step output
-appears in the Godot Output panel.
+Optional per-endpoint push buttons are always enabled. Their output is routed
+to the console of the row they are attached to, as well as the Godot Output
+panel.
+
+## Logs and the non-blocking shell
+
+Every external process runs through one helper: `create_process` plus a polled
+`await`, with stdout and stderr redirected to a log file. The editor stays
+interactive for the whole run — a `steamcmd` or `butler` upload no longer
+freezes it — and while any step is running every action button is disabled, so
+a second export or upload cannot be launched on top of the first.
+
+While a command runs the console shows a heartbeat (`… still running (30s)`);
+the captured output is emitted when the process exits. It generally cannot be
+shown sooner: on Windows, `FileAccess.open()` fails with `ERR_FILE_CANT_OPEN`
+for as long as `cmd.exe` holds the redirect target open, even though other
+processes can read that file. The tail is written incrementally anyway, both
+because it picks output up early wherever the file *is* readable and because
+`RUN_COMMAND_ASYNC` points it at a `tail_file` written by a third-party tool.
+Genuinely live output would need `OS.execute_with_pipe` plus a reader thread,
+and even that only helps for tools that do not buffer stdout when it is not a
+console (`ping` and `steamcmd` buffer; Go tools like `butler` do not).
+
+Log files are written to `<OS cache dir>/steamroller_logs/<project name>/`,
+named `<timestamp>_<seq>_<step>.log` — timestamp first, so a plain name sort is
+chronological. They are kept on success as well as failure — a failed
+`steamcmd` push is far easier to diagnose from the full file than from the
+console tail — and the newest 30 are retained. The directory is deliberately
+outside `user://`, which the `CLEAR_USER_DATA` step deletes.

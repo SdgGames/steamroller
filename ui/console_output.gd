@@ -2,10 +2,17 @@
 class_name SteamRollerConsole extends RichTextLabel
 ## Per-step console log.
 ##
-## Hidden when empty. Once a line is appended, it becomes visible with a
-## fixed height that fits ~3 lines, scrolling internally if more arrive.
+## Hidden when empty. Once a line is appended, it becomes visible with a fixed
+## height, scrolling internally as more arrive. External processes stream their
+## output here live while they run.
 
-const VISIBLE_LINES := 3
+const VISIBLE_LINES := 6
+
+## Upper bound on retained lines. A chatty tool can emit thousands; the full
+## text is always in the log file the runner names in the Output panel.
+const MAX_LINES := 800
+
+var _line_count: int = 0
 
 
 func _ready() -> void:
@@ -23,12 +30,26 @@ func _ready() -> void:
 	visible = false
 
 
+## Append one line of process output. Uses add_text(), NOT append_text():
+## the latter parses BBCode, which would swallow or mangle any "[" in the
+## output of tools like butler and steamcmd.
 func append(line: String) -> void:
 	if not visible:
 		visible = true
-	append_text(line + "\n")
+	if _line_count >= MAX_LINES:
+		clear()
+		_line_count = 0
+		add_text("… earlier output trimmed (see the log file) …\n")
+	if line.begins_with("[err]"):
+		push_color(Color(1.0, 0.45, 0.45))
+		add_text(line + "\n")
+		pop()
+	else:
+		add_text(line + "\n")
+	_line_count += 1
 
 
 func clear_log() -> void:
 	clear()
+	_line_count = 0
 	visible = false

@@ -51,13 +51,24 @@ enum Action {
 	## optionally the `setlive` branch when `branch` is provided.
 	## params: { "files": Array[String], "desc": String, "branch": String (optional) }
 	WRITE_VDF_DESC,
-	## Export the project using the Godot headless CLI for each preset entry.
-	## params: { "exports": Array[Dictionary] } where each entry is { "preset": String, "output": String }
+	## Export the project using the Godot headless CLI, mirroring the editor's
+	## "Export All" button: every preset in res://export_presets.cfg is exported
+	## to its own `export_path`. Renders two buttons (Debug and Release).
+	## params: {
+	##   "debug": bool (optional) — pin a single mode and render one button
+	##                              instead of two; the buttons set this
+	##                              themselves when it is absent.
+	##   "exports": Array[Dictionary] (optional) — override the preset list with
+	##              explicit { "preset": String, "output": String } entries
+	##              instead of reading export_presets.cfg.
+	## }
 	EXPORT_PROJECT,
-	## External CLI command run without blocking the editor (create_process +
-	## exit-code poll). Uses `executable`, `args`; `working_dir` is ignored.
-	## params: { "tail_file": String (optional) } — file whose contents are
-	## logged to the step console after the process exits.
+	## Deprecated — RUN_COMMAND no longer blocks the editor and additionally
+	## captures output and honours `working_dir`, so prefer it. Kept for configs
+	## that rely on this action's exact contract: no shell, `working_dir`
+	## ignored, output only via `tail_file`.
+	## params: { "tail_file": String (optional) } — file tailed into the step
+	## console while the process runs.
 	RUN_COMMAND_ASYNC,
 }
 
@@ -154,13 +165,46 @@ func get_default_button_label() -> String:
 		Action.RUN_COMMAND_ASYNC: return "Run command"
 		Action.RUN_STEPS: return "Run all"
 		Action.WRITE_VDF_DESC: return "Write VDF description"
-		Action.EXPORT_PROJECT: return "Export project"
+		Action.EXPORT_PROJECT: return "Export All"
 		_: return ""
+
+
+## The buttons this step renders, in display order. Each entry is:
+##   label     : String     — button text
+##   overrides : Dictionary — merged over the step's resolved `params` when the
+##                            button is pressed
+##
+## Most actions return exactly one entry. EXPORT_PROJECT returns Debug and
+## Release, mirroring the editor's own "Export All" prompt — set params.debug
+## explicitly to pin a single mode and get a single button back.
+func get_button_specs() -> Array[Dictionary]:
+	var specs: Array[Dictionary] = []
+	var default_label := get_default_button_label()
+	if default_label.is_empty():
+		return specs
+	var base := button_label if not button_label.is_empty() else default_label
+	match action:
+		Action.EXPORT_PROJECT:
+			if params.has("debug"):
+				specs.append({"label": base, "overrides": {}})
+			else:
+				specs.append({"label": "%s Debug" % base, "overrides": {"debug": true}})
+				specs.append({"label": "%s Release" % base, "overrides": {"debug": false}})
+		_:
+			specs.append({"label": base, "overrides": {}})
+	return specs
 
 
 ## True if this action has a button the user can press to execute it.
 func has_action_button() -> bool:
-	return not get_default_button_label().is_empty()
+	return not get_button_specs().is_empty()
+
+
+## True if this step's buttons stay disabled once it is marked complete, until
+## the checklist is reset. Exports are expensive and overwrite their
+## destination, so they are one-shot per version.
+func locks_when_completed() -> bool:
+	return action == Action.EXPORT_PROJECT
 
 
 ## True if this action produces console output worth showing.

@@ -19,9 +19,18 @@ var runner: SteamRollerRunner
 
 var _checkbox: CheckBox = null
 var _input: LineEdit = null
-var _action_button: Button = null
+## One entry per button this row hosts:
+##   button           : Button
+##   step             : SteamRollerStep - the step the button runs
+##   overrides        : Dictionary      - merged over that step's params
+##   marks_completion : bool            - whether pressing it ticks this row
+##   label            : String          - restored after "Running..."
+var _buttons: Array[Dictionary] = []
 var _button_flow: HFlowContainer = null
 var _console: SteamRollerConsole = null
+## Ids of every step whose buttons this row hosts - its own plus any attached
+## optional steps - so their streamed output is accepted by _on_log_line.
+var _hosted_ids: PackedStringArray = []
 var _description_label: RichTextLabel = null
 var _status_label: Label = null
 
@@ -37,8 +46,8 @@ func attach_optional_button(optional_step: SteamRollerStep) -> void:
 	if _button_flow == null:
 		push_warning("[SteamRoller] attach_optional_button called on row with no button flow.")
 		return
-	var btn := _make_button_for(optional_step)
-	_button_flow.add_child(btn)
+	_add_buttons_for(optional_step, _button_flow)
+	_ensure_console(optional_step)
 
 
 ## Start a new button line inside this row (no separator in the parent list).
@@ -50,8 +59,10 @@ func attach_new_button_line(optional_step: SteamRollerStep) -> void:
 	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(flow)
 	_button_flow = flow
-	var btn := _make_button_for(optional_step)
-	flow.add_child(btn)
+	_add_buttons_for(optional_step, flow)
+	_ensure_console(optional_step)
+	if _console:
+		move_child(_console, -1)  # the console stays at the bottom of the row
 
 
 # --- Setup -----------------------------------------------------------------
@@ -95,17 +106,19 @@ func setup(p_step: SteamRollerStep, p_runner: SteamRollerRunner) -> void:
 		_button_flow.alignment = HFlowContainer.ALIGNMENT_CENTER
 		_button_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		add_child(_button_flow)
-		_action_button = _make_button_for(step)
-		_button_flow.add_child(_action_button)
+		_add_buttons_for(step, _button_flow)
 
 	# Console (only for non-optional actions that produce output).
-	if not step.is_optional and step.produces_output():
-		_console = ConsoleScene.instantiate()
-		add_child(_console)
+	if not step.is_optional:
+		if not step.id.is_empty() and not _hosted_ids.has(step.id):
+			_hosted_ids.append(step.id)
+		_ensure_console(step)
 
 	# Subscribe to runner state changes after everything is built.
 	runner.step_state_changed.connect(_on_state_changed)
 	runner.log_line_emitted.connect(_on_log_line)
+	# Nothing is clickable while any step runs, now that steps no longer block.
+	runner.busy_changed.connect(_on_busy_changed)
 	if step.action == SteamRollerStep.Action.INPUT:
 		runner.step_input_set.connect(_on_step_input_set)
 	if not step.description.is_empty():
@@ -157,22 +170,49 @@ func _build_input_header() -> void:
 
 # --- Button factory --------------------------------------------------------
 
-## Build a button for any step (main or optional). Wires the press handler
-## to call the runner. The button captures its own step reference so a single
-## row can host buttons for several optional steps.
-func _make_button_for(target_step: SteamRollerStep) -> Button:
-	var btn := Button.new()
-	var lbl := target_step.button_label if not target_step.button_label.is_empty() \
-			else target_step.get_default_button_label()
-	btn.text = lbl
-	btn.custom_minimum_size = Vector2(180, 0)
-	btn.pressed.connect(_on_any_button_pressed.bind(target_step, btn))
-	# Only the main step's button is gated by dependencies/requirements.
-	# Optional buttons (whether attached to another row or standing alone)
-	# are always enabled.
-	if target_step == step and target_step.has_action_button() and not target_step.is_optional:
-		btn.disabled = not runner.is_enabled(target_step)
-	return btn
+## Build every button `target_step` declares and add them to `flow`. A step
+## normally declares one; EXPORT_PROJECT declares Debug and Release. Each
+## button captures its own step and param overrides, so one row can host
+## buttons for several steps.
+func _add_buttons_for(target_step: SteamRollerStep, flow: HFlowContainer) -> void:
+	# Only the row's own non-optional step drives completion. Optional buttons
+	# are shortcuts: they gate nothing and are always enabled.
+	var is_main := (target_step == step) and not target_step.is_optional
+	var specs := target_step.get_button_specs()
+	for spec in specs:
+		var btn := Button.new()
+		btn.text = str(spec.get("label", ""))
+		# Two buttons have to share the width of a narrow dock.
+		btn.custom_minimum_size = Vector2(150.0 if specs.size() > 1 else 180.0, 0.0)
+		var entry := {
+			"button": btn,
+			"step": target_step,
+			"overrides": spec.get("overrides", {}),
+			"marks_completion": is_main,
+			"label": btn.text,
+		}
+		_buttons.append(entry)
+		btn.pressed.connect(_on_any_button_pressed.bind(entry))
+		flow.add_child(btn)
+	if not target_step.id.is_empty() and not _hosted_ids.has(target_step.id):
+		_hosted_ids.append(target_step.id)
+
+
+## Give this row a console if `src_step` produces output and it has none yet.
+## Optional push buttons attach to rows (like a plain checkbox) that would
+## otherwise have nowhere to show the output those pushes now stream.
+func _ensure_console(src_step: SteamRollerStep) -> void:
+	if _console != null or not src_step.produces_output():
+		return
+	_console = ConsoleScene.instantiate()
+	add_child(_console)
+
+
+func _set_buttons_disabled(value: bool) -> void:
+	for e in _buttons:
+		var b: Button = e["button"]
+		if is_instance_valid(b):
+			b.disabled = value
 
 
 # --- Event handlers --------------------------------------------------------
@@ -196,27 +236,31 @@ func _on_step_input_set(changed_id: String, new_value: String) -> void:
 		_input.text = new_value
 
 
-## Handler for any button in this row's flow container. The "main" path
-## (updates completion, drives the console) only applies to non-optional
-## steps. Optional buttons — whether attached to another row or standing
-## alone in an orphan row — re-enable themselves and don't touch state.
-func _on_any_button_pressed(target_step: SteamRollerStep, btn: Button) -> void:
-	var is_main := (target_step == step) and not target_step.is_optional
-	if is_main and _console:
+## Handler for any button in this row. Only the row's own non-optional step
+## updates completion; optional buttons gate nothing. Every button in the row
+## is disabled for the duration, so a second export or upload cannot be
+## launched on top of the first.
+func _on_any_button_pressed(entry: Dictionary) -> void:
+	var target_step: SteamRollerStep = entry["step"]
+	var btn: Button = entry["button"]
+	if _console:
 		_console.clear_log()
-	btn.disabled = true
-	var orig_label := btn.text
+	_set_buttons_disabled(true)
 	btn.text = "Running..."
-	var ok := await runner.execute_step(target_step)
-	btn.text = orig_label
-	if is_main:
+	# Route output to this row's console whichever button was pressed, so an
+	# optional step attached here streams into the row the user clicked.
+	var console_id := ""
+	if _console != null:
+		console_id = step.id if not step.id.is_empty() else target_step.id
+	var ok: bool = await runner.execute_step(target_step, entry["overrides"], console_id)
+	if not is_instance_valid(btn) or not is_inside_tree():
+		return  # the row was rebuilt while the step ran
+	btn.text = str(entry["label"])
+	if bool(entry["marks_completion"]):
 		runner.set_completed(step.id, ok)
-		_refresh()
-	else:
-		btn.disabled = false
-		if not ok:
-			var label := target_step.button_label if not target_step.button_label.is_empty() else target_step.get_default_button_label()
-			push_error("[SteamRoller] Optional action '%s' failed." % label)
+	elif not ok:
+		push_error("[SteamRoller] Optional action '%s' failed." % str(entry["label"]))
+	_refresh()
 
 
 func _on_state_changed(changed_id: String) -> void:
@@ -229,11 +273,14 @@ func _on_variables_changed() -> void:
 
 
 func _on_log_line(target_id: String, line: String) -> void:
-	# Only show log lines from the main step. Optional steps print directly
-	# to the editor output (via push_warning / push_error) rather than the
-	# per-step console.
-	if target_id == step.id and _console:
+	# Accept output from this row's own step and from any optional step whose
+	# button this row hosts - those have no console of their own.
+	if _console and _hosted_ids.has(target_id):
 		_console.append(line)
+
+
+func _on_busy_changed(_busy: bool) -> void:
+	_refresh()
 
 
 func _refresh() -> void:
@@ -241,8 +288,19 @@ func _refresh() -> void:
 		var done := runner.is_completed(step.id)
 		if _checkbox.button_pressed != done:
 			_checkbox.set_pressed_no_signal(done)
-	if _action_button and not step.is_optional:
-		_action_button.disabled = not runner.is_enabled(step)
+	var busy := runner.is_busy()
+	# Exports lock once complete: they overwrite their destination, so they are
+	# one-shot until Reset-and-increment restarts the checklist.
+	var locked := step.locks_when_completed() and runner.is_completed(step.id)
+	for e in _buttons:
+		var b: Button = e["button"]
+		if not is_instance_valid(b):
+			continue
+		var s: SteamRollerStep = e["step"]
+		# Main buttons are gated by dependencies; optional buttons are always
+		# available - but nothing is clickable while a step is running.
+		var gated: bool = (s == step) and not s.is_optional and not runner.is_enabled(s)
+		b.disabled = busy or gated or (locked and bool(e["marks_completion"]))
 	_refresh_description()
 
 
