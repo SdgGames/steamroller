@@ -9,6 +9,7 @@ signal step_state_changed(step_id: String)
 signal log_line_emitted(step_id: String, line: String)
 signal variables_changed
 signal step_input_set(step_id: String, new_value: String)
+signal tab_switch_requested(tab_index: int)
 ## Emitted on the 0<->1 edges of step execution. The UI uses it to disable every
 ## action button while something is running - now that external processes no
 ## longer block the editor, nothing else stops a second click.
@@ -95,7 +96,7 @@ func rebuild_variables() -> void:
 	variables["APP_NAME"] = str(ProjectSettings.get_setting("application/config/name", ""))
 	var _raw_commit: String = str(ProjectSettings.get_setting("application/config/commit_message", ""))
 	variables["COMMIT_MESSAGE"] = _raw_commit
-	variables["COMMIT_MESSAGE_SLUG"] = _raw_commit.replace(" ", "_").to_lower()
+	variables["COMMIT_MESSAGE_SLUG"] = _sanitize_path_segment(_raw_commit).replace(" ", "_")
 	variables["STEAM_BRANCH"] = str(ProjectSettings.get_setting("application/steamroller/steam_branch", ""))
 	variables["DEMO_MODE"] = "true" if _get_demo_mode() else "false"
 	variables["USER_DIR"] = ProjectSettings.globalize_path("user://")
@@ -110,6 +111,22 @@ func _get_demo_mode() -> bool:
 	if ProjectSettings.has_setting(SETTING):
 		return bool(ProjectSettings.get_setting(SETTING))
 	return false
+
+
+## Converts a free-text string into a safe, lowercase path segment.
+## Lowercases the text and removes characters that are invalid in folder names
+## (anything other than alphanumeric, space, underscore, or hyphen).
+static func _sanitize_path_segment(text: String) -> String:
+	var result := text.to_lower()
+	var clean := ""
+	for ch in result:
+		if ch.unicode_at(0) >= 97 and ch.unicode_at(0) <= 122: # a-z
+			clean += ch
+		elif ch.unicode_at(0) >= 48 and ch.unicode_at(0) <= 57: # 0-9
+			clean += ch
+		elif ch == " " or ch == "_" or ch == "-":
+			clean += ch
+	return clean
 
 
 ## Validate IDs, depends_on references, and per-step requirements.
@@ -710,6 +727,7 @@ func _reset_and_increment() -> bool:
 	step_input_set.emit("version", bumped)
 	step_input_set.emit("commit_message", "")
 	_reset_all_tabs()
+	tab_switch_requested.emit(0)
 	return true
 
 

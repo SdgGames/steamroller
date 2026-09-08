@@ -37,6 +37,7 @@ func _ready() -> void:
 	status_label.visible = false
 	runner.load_config(config)
 	runner.variables_changed.connect(_refresh_header)
+	runner.tab_switch_requested.connect(func(idx: int) -> void: tabs.current_tab = idx)
 	_refresh_header()
 	_build_tabs()
 	_pin_instructions_tab()
