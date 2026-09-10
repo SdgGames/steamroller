@@ -133,6 +133,51 @@ output, e.g. `builds/latest/game_depot`):
 `butler.exe` ships bundled at `addons/steamroller/butler-windows-amd64/`.
 Run `butler login` once from a terminal, then uploads work.
 
+## Steam Deck (devkit)
+
+`deck/deploy.sh` takes the project from an edit to a running build on a Steam
+Deck, in Game Mode, through the SteamOS devkit's device-side tools
+(`~/devkit-utils`, installed when the Deck is paired with the SteamOS Devkit
+Client once; after that the whole loop is ssh):
+
+| step | what runs | where |
+|---|---|---|
+| export | `godot --headless --export-debug <preset>` | workstation |
+| prepare | `steamos-prepare-upload --gameid <title>` | Deck |
+| stop | `pkill` the running title | Deck |
+| sync | `sha256sum` both ends, `scp` only what differs, prune extras | both |
+| register | `steam-client-create-shortcut` (argv + compat tool) | Deck |
+| launch | `steam-devkit-rpc run-game` | Deck |
+
+Setup, once per machine:
+
+```bash
+cp addons/steamroller/templates/deck.env.example data/deck.env   # fill in DECK_HOST, GODOT_BIN
+bash addons/steamroller/deck/deploy.sh --doctor
+```
+
+`data/deck.env` holds the Deck's address and the Godot binary; gitignore it in
+your project. Everything else is derived: the devkit title from
+`application/config/name`, the Deck-side `user://` folder from the same name,
+the export folder from the preset's `export_path` (default preset
+`Deck_Testing`; keep it out of the depot folders), and the wipe guard from
+`BUILDS_DIR` (default `<project>/../builds`). Each can be overridden in
+`deck.env`; the example lists every key. `--env FILE` reads a different file.
+
+Flags: `--release`, `--no-export`, `--no-launch`, `--launch` (re-register and
+run what is on the Deck), `--stop`, `--debugger[=HOST]` (appends
+`--remote-debug tcp://HOST:6007`; the editor needs *Debug > Keep Debug Server
+Open*), `--clean-cache` (wipe `user://` on the Deck first), `--tail`,
+`--run ARGS...`, `--doctor`, `--dry-run`. Every failure prints an `ERROR` line
+and exits 1.
+
+The template config wires it up as the optional **Build + run on Deck** button
+(`RUN_COMMAND` through `${BASH_EXE}` with `${DECK_SCRIPT} --clean-cache`).
+`BASH_EXE` defaults to Git for Windows' `bash.exe`; the script also runs from a
+Git Bash terminal directly. Note that the dock only shows the script's output
+once it exits (see *Logs* below); the run itself takes about twenty seconds
+and returns as soon as the Deck reports the game's pid.
+
 ## Variables
 
 User-defined variables live in `config.variables`. Built-ins always available:

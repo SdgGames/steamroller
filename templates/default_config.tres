@@ -59,6 +59,18 @@ params = {
 args = PackedStringArray()
 step_ids = PackedStringArray()
 
+[sub_resource type="Resource" id="s_deck_deploy"]
+script = ExtResource("2_step")
+id = "deck_deploy"
+action = 12
+depends_on = PackedStringArray()
+button_label = "Build + run on Deck"
+is_optional = true
+executable = "${BASH_EXE}"
+args = PackedStringArray("${DECK_SCRIPT}", "--clean-cache")
+working_dir = "${PROJECT_DIR}"
+step_ids = PackedStringArray()
+
 [sub_resource type="Resource" id="s_tests"]
 script = ExtResource("2_step")
 id = "tests"
@@ -296,8 +308,10 @@ step_ids = PackedStringArray()
 script = ExtResource("1_cfg")
 config_name = "SteamRoller Game Template"
 variables = {
+"BASH_EXE": "C:/Program Files/Git/bin/bash.exe",
 "BUILDS_DIR": "${PROJECT_DIR}../builds",
 "BUTLER_PATH": "${PROJECT_DIR}addons/steamroller/butler-windows-amd64/butler.exe",
+"DECK_SCRIPT": "${PROJECT_DIR}addons/steamroller/deck/deploy.sh",
 "ITCH_PROJECT": "",
 "ITCH_USER": "",
 "STEAM_APP_ID_DEMO": "480",
@@ -306,4 +320,4 @@ variables = {
 "STEAM_USER": "",
 "VDF_DIR": "${PROJECT_DIR}../steamworks_sdk/tools/ContentBuilder/scripts"
 }
-steps = [SubResource("s_version"), SubResource("s_commit"), SubResource("s_branch"), SubResource("s_delete"), SubResource("s_tests"), SubResource("s_clear_user"), SubResource("s_open_build"), SubResource("s_export"), SubResource("s_movie"), SubResource("s_archive"), SubResource("s_open_build"), SubResource("s_review"), SubResource("s_copy"), SubResource("s_reset"), SubResource("s_release_tab"), SubResource("s_build_ok"), SubResource("s_open_vdf"), SubResource("s_push_builds"), SubResource("s_push_all"), SubResource("s_push_all_demo"), SubResource("s_push_demo_steam"), SubResource("s_push_demo_itch"), SubResource("s_push_web_itch"), SubResource("s_push_all_release"), SubResource("s_push_game_steam"), SubResource("s_push_game_itch"), SubResource("s_reset")]
+steps = [SubResource("s_version"), SubResource("s_commit"), SubResource("s_branch"), SubResource("s_delete"), SubResource("s_deck_deploy"), SubResource("s_tests"), SubResource("s_clear_user"), SubResource("s_open_build"), SubResource("s_export"), SubResource("s_movie"), SubResource("s_archive"), SubResource("s_open_build"), SubResource("s_review"), SubResource("s_copy"), SubResource("s_reset"), SubResource("s_release_tab"), SubResource("s_build_ok"), SubResource("s_open_vdf"), SubResource("s_push_builds"), SubResource("s_push_all"), SubResource("s_push_all_demo"), SubResource("s_push_demo_steam"), SubResource("s_push_demo_itch"), SubResource("s_push_web_itch"), SubResource("s_push_all_release"), SubResource("s_push_game_steam"), SubResource("s_push_game_itch"), SubResource("s_reset")]
