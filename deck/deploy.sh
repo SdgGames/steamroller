@@ -148,7 +148,7 @@ Usage: deploy.sh [options] [--run ARGS...]
   --debugger[=HOST]   run with --remote-debug tcp://HOST:6007 (editor must have
                       Debug > Keep Debug Server Open); HOST autodetected
   --clean-cache       wipe user:// on the Deck first (cold shader cache)
-  --tail              after launch, follow user://logs/godot.log
+  --tail              after launch, follow user://logs/godot.log until the game exits
   --run ARGS...       extra args passed to the game binary
   --doctor            preflight checks (add --debugger to probe port 6007)
   --dry-run           print what would run; touches neither Godot nor the Deck
@@ -521,8 +521,11 @@ do_launch() {
 		|| die "Steam accepted run-game but no $DECK_TITLE process appeared within 30 s (check the Deck screen / Steam library)"
 	info "Game started (pid $pid)"
 	if [ "$DO_TAIL" -eq 1 ]; then
-		step "Following user://logs/godot.log (Ctrl-C to stop following; the game keeps running)"
-		deck "sleep 2; tail -n +1 -F \"$USER_DIR/logs/godot.log\"" || true
+		# --pid ends the tail when the game exits, so a scripted run (bench.sh)
+		# gets the whole log and returns; Ctrl-C still detaches, game keeps running.
+		step "Following user://logs/godot.log until the game exits (Ctrl-C detaches)"
+		deck "sleep 2; tail --pid=$pid -n +1 -F \"$USER_DIR/logs/godot.log\"" || true
+		info "Game exited"
 	fi
 }
 

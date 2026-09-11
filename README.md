@@ -167,8 +167,8 @@ the export folder from the preset's `export_path` (default preset
 Flags: `--release`, `--no-export`, `--no-launch`, `--launch` (re-register and
 run what is on the Deck), `--stop`, `--debugger[=HOST]` (appends
 `--remote-debug tcp://HOST:6007`; the editor needs *Debug > Keep Debug Server
-Open*), `--clean-cache` (wipe `user://` on the Deck first), `--tail`,
-`--run ARGS...`, `--doctor`, `--dry-run`. Every failure prints an `ERROR` line
+Open*), `--clean-cache` (wipe `user://` on the Deck first), `--tail` (follow the
+Deck-side `user://logs/godot.log` until the game exits), `--run ARGS...`, `--doctor`, `--dry-run`. Every failure prints an `ERROR` line
 and exits 1.
 
 The template config wires it up as the optional **Build + run on Deck** button
@@ -177,6 +177,28 @@ The template config wires it up as the optional **Build + run on Deck** button
 Git Bash terminal directly. Note that the dock only shows the script's output
 once it exits (see *Logs* below); the run itself takes about twenty seconds
 and returns as soon as the Deck reports the game's pid.
+
+### Benchmark: `deck/bench.sh`
+
+`bench.sh <windows exe> [linux preset] [results file]` runs an exported build with `--bench`
+three ways and prints one result line per run: Windows Vulkan, then Windows
+D3D12 (`--rendering-driver d3d12`) — a smoke test, one after the other — and,
+in parallel, the Steam Deck through `deploy.sh --no-export --tail --run --bench`
+with `EXPORT_PRESET` set to the Linux preset (default `Linux_Final`), so the
+depot files are what gets pushed. The Deck number is the one to read.
+
+The game's side of the contract: when started with `--bench` it prints one line
+beginning `BENCHMARK` (any fields after that) and quits. `--benchmark` is an
+engine flag in Godot 4, which is why the short name. Windows output is read
+from stdout, the Deck's from the followed log. Each run is wrapped in
+`timeout` (`BENCH_TIMEOUT`, default 300 s). A run with no `BENCHMARK` line is
+reported as `FAILED` and the script exits 1 after printing every result it did
+get. Every run also appends a dated block of the same lines to the results
+file (default `<exe dir>/../benchmark.txt`, i.e. `builds/latest/`, so the
+archive step keeps it and the depot does not ship it). Wire it as a `RUN_COMMAND` step: `${BASH_EXE}` with args
+`${PROJECT_DIR}addons/steamroller/deck/bench.sh`,
+`${BUILDS_DIR}/latest/game_depot/<Game>.exe`, `Linux_Final`,
+`${BUILDS_DIR}/latest/benchmark.txt`.
 
 ## Variables
 
