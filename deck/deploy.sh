@@ -465,18 +465,38 @@ do_sync() {
 	info "$sent sent, $skipped unchanged"
 }
 
+# True when this run registers anything beyond the bare binary. Written with
+# plain `if`s: under `set -e` a bare `a && b` that falls through would take the
+# whole script out.
+extra_args() {
+	if [ "$USE_DEBUGGER" -eq 1 ]; then
+		return 0
+	fi
+	local a
+	for a in ${GAME_ARGS[@]+"${GAME_ARGS[@]}"}; do
+		return 0
+	done
+	return 1
+}
+
 # Build the argv string Steam will split, and re-register the shortcut.
 # This is what the devkit GUI does on every Upload; it is one round trip and
 # it is the only way the start command (e.g. --remote-debug) ever changes.
+# With `plain`, register the bare binary instead: the shortcut Steam keeps IS
+# the Deck's play button, so a --run or --debugger argv must not outlive the run
+# that asked for it (see restore_shortcut).
 do_register() {
+	local plain="${1:-}"
 	local argv; argv="$(export_basename)"
-	if [ "$USE_DEBUGGER" -eq 1 ]; then
+	if [ -z "$plain" ] && [ "$USE_DEBUGGER" -eq 1 ]; then
 		local dhost; dhost="$(resolve_debug_host)" || die "--debugger: could not determine this workstation's address"
 		argv+=" --remote-debug tcp://$dhost:$DEBUG_PORT"
 		step "Debugger target: $dhost:$DEBUG_PORT (editor needs Debug > Keep Debug Server Open)"
 	fi
-	local a
-	for a in ${GAME_ARGS[@]+"${GAME_ARGS[@]}"}; do argv+=" $a"; done
+	if [ -z "$plain" ]; then
+		local a
+		for a in ${GAME_ARGS[@]+"${GAME_ARGS[@]}"}; do argv+=" $a"; done
+	fi
 
 	local settings='{"steam_play": "0"'
 	[ -n "$DECK_RUNTIME" ] && settings+=', "compat_tool": "'"$DECK_RUNTIME"'"'
@@ -499,6 +519,17 @@ do_register() {
 	esac
 }
 
+# Put the play button back. Steam reads the argv when it spawns the game, so once
+# the process is up the shortcut can go back to the bare binary: the next launch
+# from the Deck's library is the GAME, not a repeat of this run. Without this a
+# `--run --bench` gate leaves the benchmark wired to the play button, which has
+# cost a confused playtest more than once.
+restore_shortcut() {
+	extra_args || return 0
+	step "Restoring the plain shortcut (this run's args were for this run only)"
+	do_register plain
+}
+
 do_clean_cache() {
 	step "Clearing Deck-side user:// (cold shader cache)"
 	if [ "$DRY_RUN" -eq 1 ]; then show_cmd ssh "$TARGET" "rm -rf \"$USER_DIR\""; return 0; fi
@@ -509,7 +540,9 @@ do_clean_cache() {
 do_launch() {
 	step "Launching $DECK_TITLE through Steam"
 	if [ "$DRY_RUN" -eq 1 ]; then
-		show_cmd ssh "$TARGET" "python3 ~/devkit-utils/steam-devkit-rpc run-game gameid=$DECK_TITLE"; return 0
+		show_cmd ssh "$TARGET" "python3 ~/devkit-utils/steam-devkit-rpc run-game gameid=$DECK_TITLE"
+		restore_shortcut   # shown here too, so --dry-run states the whole plan
+		return 0
 	fi
 	local out rc=0
 	out="$(deck "python3 ~/devkit-utils/steam-devkit-rpc run-game gameid=$DECK_TITLE" 2>&1)" || rc=$?
@@ -520,6 +553,10 @@ do_launch() {
 	pid="$(deck "for i in \$(seq 60); do p=\$(pgrep -f $(sq "$(bin_pattern)") | head -n 1); [ -n \"\$p\" ] && { echo \"\$p\"; exit 0; }; sleep 0.5; done; exit 1" 2>/dev/null)" \
 		|| die "Steam accepted run-game but no $DECK_TITLE process appeared within 30 s (check the Deck screen / Steam library)"
 	info "Game started (pid $pid)"
+	# Steam has taken the argv (the process is up), so the shortcut is free to go
+	# back to the plain game before anything else can happen -- including a tail
+	# the user may Ctrl-C out of.
+	restore_shortcut
 	if [ "$DO_TAIL" -eq 1 ]; then
 		# --pid ends the tail when the game exits, so a scripted run (bench.sh)
 		# gets the whole log and returns; Ctrl-C still detaches, game keeps running.
@@ -604,7 +641,15 @@ main() {
 	do_sync
 	do_register
 	[ "$DO_CLEAN_CACHE" -eq 1 ] && do_clean_cache
-	if [ "$DO_LAUNCH" -eq 0 ]; then step "Done (--no-launch)"; return 0; fi
+	if [ "$DO_LAUNCH" -eq 0 ]; then
+		# Nothing launched, so nothing cleared the argv: say so rather than leave
+		# the play button quietly wired to this run's args.
+		if extra_args; then
+			warn "the shortcut still carries this run's args and no launch cleared them -- the Deck's play button will use them until the next deploy (reset: deploy.sh --launch)"
+		fi
+		step "Done (--no-launch)"
+		return 0
+	fi
 	do_launch
 }
 

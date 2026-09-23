@@ -171,6 +171,16 @@ Open*), `--clean-cache` (wipe `user://` on the Deck first), `--tail` (follow the
 Deck-side `user://logs/godot.log` until the game exits), `--run ARGS...`, `--doctor`, `--dry-run`. Every failure prints an `ERROR` line
 and exits 1.
 
+**The registered argv is the Deck's play button, so `--run` and `--debugger` args
+are transient.** The shortcut is what Steam launches when someone picks the title
+in the library, and it persists until something re-registers it. Steam reads the
+argv when it spawns the process, so once the game's pid is up the shortcut is
+restored to the bare binary — the run gets its args, and the play button goes
+back to being the game. Without this a `--run --bench` gate leaves the benchmark
+wired to the play button, and the next hand-launch runs the suite and quits,
+which reads as "the build is broken". `--no-launch` has nothing to restore it
+with, so it warns instead and names the remedy (`deploy.sh --launch`).
+
 The template config wires it up as the optional **Build + run on Deck** button
 (`RUN_COMMAND` through `${BASH_EXE}` with `${DECK_SCRIPT} --clean-cache`).
 `BASH_EXE` defaults to Git for Windows' `bash.exe`; the script also runs from a
