@@ -201,13 +201,19 @@ if [ -n "$DECK_USER_DIR" ]; then
 	USER_DIR="$DECK_USER_DIR"
 else
 	_udir="$APP_NAME"
+	_base='$HOME/.local/share/godot/app_userdata/'
 	if [ "$(project_setting config/use_custom_user_dir)" = "true" ]; then
 		_custom="$(project_setting config/custom_user_dir_name)"
-		[ -n "$_custom" ] && _udir="$_custom"
+		# A custom user dir is not under godot/app_userdata: on Linux Godot puts it
+		# straight in the data home, ~/.local/share/<custom_user_dir_name>.
+		if [ -n "$_custom" ]; then
+			_udir="$_custom"
+			_base='$HOME/.local/share/'
+		fi
 	fi
 	[ -n "$_udir" ] || die "cannot derive the Deck-side user:// folder: set DECK_USER_DIR in $ENV_FILE"
-	USER_DIR='$HOME/.local/share/godot/app_userdata/'"$_udir"
-	unset _udir _custom
+	USER_DIR="$_base$_udir"
+	unset _udir _custom _base
 fi
 
 # -4: mDNS can hand ssh an IPv6 link-local address, which breaks $SSH_CLIENT
