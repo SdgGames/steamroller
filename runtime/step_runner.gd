@@ -607,7 +607,10 @@ func _record_movie(p: Dictionary) -> bool:
 func _reencode_video(movie_path: String) -> bool:
 	var compressed := movie_path.get_basename() + "_sample.mp4"
 	log_line("Re-encoding with ffmpeg → %s" % compressed)
+	# -loglevel error hides ffmpeg's false "keyframe not correctly marked" warnings on
+	# Godot's OGV (FFmpeg #11628); -stats keeps the progress line.
 	var ffmpeg_args := [
+		"-loglevel", "error", "-stats",
 		"-i", ProjectSettings.globalize_path(movie_path),
 		"-vf", "scale=-1:1080",
 		"-c:v", "libx264", "-crf", "23", "-preset", "medium",
