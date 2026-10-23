@@ -168,13 +168,18 @@ pass, with `editor/movie_writer/ogv/encoding_speed` 1 for the job only.
 ## Copy saves: `deck/pull_saves.sh`
 
 ```
-pull_saves.sh --dest DIR [--local DIR]... [--deck auto|DIR]... [--require-deck] [--dry-run] -- SUBDIR...
+pull_saves.sh --dest DIR [--local DIR]... [--deck auto|DIR]... [--exclude PATTERN]...
+              [--require-deck] [--dry-run] -- SUBDIR...
 ```
 
 Merges each `SUBDIR` (say `saves`, or `sunsets photos`) of every source folder
 into `DEST/SUBDIR`: a file is copied when the destination lacks it or the
-source's copy is newer; a newer file already there is kept; sources are never
-changed. `--deck auto` finds the Deck's user folders as `deploy.sh` does
+source's copy is newer; a file with the same contents is left alone whatever its
+date; sources are never changed. Two sources holding different contents under one
+name (a save edited on two machines between syncs) is a **conflict**: the newer
+copy is kept and a `conflict:` line names the file and both sources. Steam
+Cloud's `steam_autocloud.vdf` markers and `*.tmp` files are never copied
+(`--exclude` adds patterns). `--deck auto` finds the Deck's user folders as `deploy.sh` does
 (`DECK_USER_DIR`, else `~/.local/share/<custom_user_dir_name>`), plus the demo
 export's folder when `project.godot` names one. An unreachable Deck is a warning
 and the local folders are still copied, unless `--require-deck`. The template
