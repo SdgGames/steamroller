@@ -113,7 +113,7 @@ action = 12
 button_label = "Copy saves"
 attach_to = "movie"
 executable = "${BASH_EXE}"
-args = PackedStringArray("${PULL_SAVES_SCRIPT}", "--dest", "${BUILDS_DIR}/latest", "--local", "${USER_DIR}", "--local", "${USER_DIR_DEMO}", "--deck", "auto", "--", "saves")
+args = PackedStringArray("${PULL_SAVES_SCRIPT}", "--dest", "${BUILDS_DIR}/latest", "--local", "${USER_DIR}", "--local", "${USER_DIR_FULL}", "--local", "${USER_DIR_DEMO}", "--deck", "auto", "--", "saves")
 working_dir = "${PROJECT_DIR}"
 
 [sub_resource type="Resource" id="s_archive"]

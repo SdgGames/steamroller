@@ -99,6 +99,19 @@ static func demo_user_dir() -> String:
 	return OS.get_data_dir().path_join(dir_name)
 
 
+## The folder an exported full build saves in on this machine. The editor's
+## `user://` follows its feature overrides (a project can give editor runs a
+## folder of their own with `custom_user_dir_name.editor`), so this one is read
+## from the plain keys, as an export reads them.
+static func full_user_dir() -> String:
+	if not flag(USE_CUSTOM_USER_DIR):
+		return ProjectSettings.globalize_path("user://")
+	var dir_name := text(CUSTOM_USER_DIR_NAME)
+	if dir_name.is_empty():
+		dir_name = text(APP_NAME)
+	return OS.get_data_dir().path_join(dir_name)
+
+
 ## Add a setting with a default and editor metadata, keeping any stored value.
 static func _register(key: String, default_value: Variant, type: int,
 		hint: int = PROPERTY_HINT_NONE, hint_string: String = "") -> void:

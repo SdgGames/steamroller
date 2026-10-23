@@ -18,7 +18,8 @@
 # conflict.
 #
 #   --local DIR       a user data folder on this machine (repeatable; an empty
-#                     value is skipped, so an unset variable is harmless)
+#                     value is skipped, so an unset variable is harmless, and a
+#                     folder given twice is read once)
 #   --deck auto       the Deck's user data folders, found as deploy.sh finds them:
 #                     DECK_USER_DIR from deck.env, else ~/.local/share/<the
 #                     project's custom_user_dir_name> (or godot/app_userdata/
@@ -198,10 +199,13 @@ step "Copying ${SUBDIRS[*]} into $DEST$([ "$DRY" -eq 1 ] && printf ' (dry run)')
 
 # --- This machine --------------------------------------------------------------
 
+declare -A LOCAL_SEEN=()
 for dir in "${LOCALS[@]}"; do
 	[ -n "$dir" ] || continue
 	root="$(to_posix "$dir")"
 	root="${root%/}"
+	[ -z "${LOCAL_SEEN[$root]:-}" ] || continue   # the same folder twice: once
+	LOCAL_SEEN["$root"]=1
 	if [ ! -d "$root" ]; then
 		info "This PC: no folder $dir, skipped"
 		continue

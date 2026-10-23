@@ -64,6 +64,7 @@ static func builtins() -> Dictionary[String, String]:
 		"STEAM_BRANCH": SteamRollerSettings.text(SteamRollerSettings.STEAM_BRANCH),
 		"DEMO_MODE": "true" if SteamRollerSettings.demo_mode() else "false",
 		"USER_DIR": ProjectSettings.globalize_path("user://"),
+		"USER_DIR_FULL": SteamRollerSettings.full_user_dir(),
 		"USER_DIR_DEMO": SteamRollerSettings.demo_user_dir(),
 		"PROJECT_DIR": ProjectSettings.globalize_path("res://"),
 		"PLATFORM": OS.get_name(),

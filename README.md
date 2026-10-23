@@ -100,6 +100,15 @@ editor runs: a game that wants to preview its demo from the editor reads the
 setting when `OS.has_feature("editor")` is true. The plugin itself does not change
 how the game runs.
 
+### Editor runs and the save folder
+
+A game run from the editor saves in `${USER_DIR}`. A project can give editor runs a
+folder of their own with a feature override,
+`application/config/custom_user_dir_name.editor`, so test saves stay out of the
+folder Steam Cloud syncs for the exported game. `${USER_DIR_FULL}` is then still the
+exported game's folder: the template's Copy saves reads both, and a folder named
+twice is read once.
+
 ## Variables
 
 Steps write `${NAME}`. The config's own `variables` may use other variables
@@ -113,7 +122,8 @@ Steps write `${NAME}`. The config's own `variables` may use other variables
 | `${COMMIT_MESSAGE_SLUG}` | the message as a folder name: lower case, `[a-z0-9_-]`, spaces as `_` |
 | `${STEAM_BRANCH}` | `application/steamroller/steam_branch` |
 | `${DEMO_MODE}` | `true` or `false` |
-| `${USER_DIR}` | this project's `user://`, absolute |
+| `${USER_DIR}` | `user://` as the editor resolves it, absolute: where the game saves when the editor runs it |
+| `${USER_DIR_FULL}` | where an exported full build saves (`config/custom_user_dir_name` without the editor's overrides); the same folder as `${USER_DIR}` unless the project names a `.editor` one |
 | `${USER_DIR_DEMO}` | the demo export's user folder (`config/custom_user_dir_name.demo`), or empty |
 | `${PROJECT_DIR}` | `res://`, absolute, with a trailing slash |
 | `${PLATFORM}` | `OS.get_name()` |
@@ -179,7 +189,7 @@ date; sources are never changed. Two sources holding different contents under on
 name (a save edited on two machines between syncs) is a **conflict**: the newer
 copy is kept and a `conflict:` line names the file and both sources. Steam
 Cloud's `steam_autocloud.vdf` markers and `*.tmp` files are never copied
-(`--exclude` adds patterns). `--deck auto` finds the Deck's user folders as `deploy.sh` does
+(`--exclude` adds patterns); a `--local` folder given twice is read once. `--deck auto` finds the Deck's user folders as `deploy.sh` does
 (`DECK_USER_DIR`, else `~/.local/share/<custom_user_dir_name>`), plus the demo
 export's folder when `project.godot` names one. An unreachable Deck is a warning
 and the local folders are still copied, unless `--require-deck`. The template
