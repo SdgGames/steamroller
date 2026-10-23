@@ -167,7 +167,8 @@ the export folder from the preset's `export_path` (default preset
 Flags: `--release`, `--no-export`, `--no-launch`, `--launch` (re-register and
 run what is on the Deck), `--stop`, `--debugger[=HOST]` (appends
 `--remote-debug tcp://HOST:6007`; the editor needs *Debug > Keep Debug Server
-Open*), `--clean-cache` (wipe `user://` on the Deck first), `--tail` (follow the
+Open*), `--clean-cache` (clear the shader caches under `user://` on the Deck first;
+saves, logs and prefs are kept), `--tail` (follow the
 Deck-side `user://logs/godot.log` until the game exits), `--run ARGS...`, `--doctor`, `--dry-run`. Every failure prints an `ERROR` line
 and exits 1.
 

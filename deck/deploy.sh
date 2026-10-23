@@ -147,7 +147,8 @@ Usage: deploy.sh [options] [--run ARGS...]
   --stop              kill the running instance on the Deck
   --debugger[=HOST]   run with --remote-debug tcp://HOST:6007 (editor must have
                       Debug > Keep Debug Server Open); HOST autodetected
-  --clean-cache       wipe user:// on the Deck first (cold shader cache)
+  --clean-cache       clear the shader caches under user:// on the Deck first (cold
+                      shader cache); saves, logs and prefs are kept
   --tail              after launch, follow user://logs/godot.log until the game exits
   --run ARGS...       extra args passed to the game binary
   --doctor            preflight checks (add --debugger to probe port 6007)
@@ -536,11 +537,21 @@ restore_shortcut() {
 	do_register plain
 }
 
+# Only Godot's caches go: the shader cache and the Vulkan pipeline cache. Never the
+# folder itself -- on a Deck that also has the game installed from Steam, user:// is
+# the SAME folder the Steam build saves into (one custom_user_dir_name), and a wipe
+# here took a player's sunsets with it once (Sunset Painter, 2026-10-23). Saves, logs
+# and prefs stay.
+CACHE_DIRS=(shader_cache vulkan)
 do_clean_cache() {
-	step "Clearing Deck-side user:// (cold shader cache)"
-	if [ "$DRY_RUN" -eq 1 ]; then show_cmd ssh "$TARGET" "rm -rf \"$USER_DIR\""; return 0; fi
-	deck "rm -rf \"$USER_DIR\" && test ! -e \"$USER_DIR\"" || die "could not remove $USER_DIR on the Deck"
-	info "removed $USER_DIR"
+	step "Clearing the Deck-side shader caches (cold run); saves, logs and prefs are kept"
+	local d
+	for d in "${CACHE_DIRS[@]}"; do
+		[ -n "$d" ] || die "empty cache dir name"
+		if [ "$DRY_RUN" -eq 1 ]; then show_cmd ssh "$TARGET" "rm -rf \"$USER_DIR/$d\""; continue; fi
+		deck "rm -rf \"$USER_DIR/$d\" && test ! -e \"$USER_DIR/$d\"" || die "could not remove $USER_DIR/$d on the Deck"
+		info "removed $USER_DIR/$d"
+	done
 }
 
 do_launch() {
