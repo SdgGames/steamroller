@@ -1,312 +1,296 @@
 @tool
 class_name SteamRollerStepRow extends VBoxContainer
-## One row in the SteamRoller checklist.
+## One row of the checklist:
 ##
-## Standard layout (composed based on step.action):
-##   [Checkbox] [Step name]            (INPUT replaces this with [Label] [LineEdit])
-##   <description RichTextLabel>        (only if description is non-empty)
-##         [ Action button ]            (centered, in an HFlowContainer)
-##   <per-step console output>          (only if action produces output)
+##   [x] Display name           a checkbox (INPUT: a label and a text field;
+##                              a step with no display name has no header)
+##   description                BBCode, variables resolved
+##        [ Button ] [ ... ]    the step's own buttons, then those of the
+##                              steps attached to it (attach())
+##   console                    hidden until a line arrives
 ##
-## When `step.is_optional` is true, the row is NOT created standalone — the
-## panel calls `attach_optional_to(...)` on the *previous* row to inject this
-## step's button into the previous row's button flow container.
+## While a button's step runs, that button reads Stop. A step that asks a
+## question first (SteamRollerStep.confirmation) runs only on OK.
 
 const ConsoleScene := preload("res://addons/steamroller/ui/console_output.tscn")
 
+## One button and the step it runs.
+class ButtonEntry:
+	var button: Button
+	var step: SteamRollerStep
+	## Merged over the step's params when pressed (Debug vs Release).
+	var overrides: Dictionary
+	var label: String
+
 var step: SteamRollerStep
-var runner: SteamRollerRunner
+var runner: SteamRollerStepRunner
 
 var _checkbox: CheckBox = null
 var _input: LineEdit = null
-## One entry per button this row hosts:
-##   button           : Button
-##   step             : SteamRollerStep - the step the button runs
-##   overrides        : Dictionary      - merged over that step's params
-##   marks_completion : bool            - whether pressing it ticks this row
-##   label            : String          - restored after "Running..."
-var _buttons: Array[Dictionary] = []
-var _button_flow: HFlowContainer = null
-var _console: SteamRollerConsole = null
-## Ids of every step whose buttons this row hosts - its own plus any attached
-## optional steps - so their streamed output is accepted by _on_log_line.
-var _hosted_ids: PackedStringArray = []
-var _description_label: RichTextLabel = null
-var _status_label: Label = null
-
-## True if this row has a button flow container that can host additional
-## optional buttons. Panels query this before attaching an optional step.
-func has_button_flow() -> bool:
-	return _button_flow != null
+var _description: RichTextLabel = null
+var _flow: HFlowContainer = null
+var _console: SteamRollerConsoleOutput = null
+var _buttons: Array[ButtonEntry] = []
+## The button whose step is running: it reads Stop.
+var _running: ButtonEntry = null
+## The button waiting on the confirmation dialog.
+var _pending: ButtonEntry = null
+var _confirm: ConfirmationDialog = null
+## Console ids whose lines this row's console shows: its steps' ids, and its own
+## key for steps with none.
+var _hosted: PackedStringArray = []
+## Step ids whose ticks change what this row shows.
+var _watched: Dictionary[String, bool] = {}
+var _row_key := ""
 
 
-## Append a button for an optional step into this row's flow container.
-## Caller must have verified has_button_flow() == true.
-func attach_optional_button(optional_step: SteamRollerStep) -> void:
-	if _button_flow == null:
-		push_warning("[SteamRoller] attach_optional_button called on row with no button flow.")
-		return
-	_add_buttons_for(optional_step, _button_flow)
-	_ensure_console(optional_step)
-
-
-## Start a new button line inside this row (no separator in the parent list).
-## Creates a second HFlowContainer and re-points _button_flow to it so that
-## subsequent attach_optional_button calls land on the new line.
-func attach_new_button_line(optional_step: SteamRollerStep) -> void:
-	var flow := HFlowContainer.new()
-	flow.alignment = HFlowContainer.ALIGNMENT_CENTER
-	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	add_child(flow)
-	_button_flow = flow
-	_add_buttons_for(optional_step, flow)
-	_ensure_console(optional_step)
-	if _console:
-		move_child(_console, -1)  # the console stays at the bottom of the row
-
-
-# --- Setup -----------------------------------------------------------------
-
-func setup(p_step: SteamRollerStep, p_runner: SteamRollerRunner) -> void:
+func setup(p_step: SteamRollerStep, p_runner: SteamRollerStepRunner) -> void:
 	step = p_step
 	runner = p_runner
-
-	# Header — depends on action type. Optional orphan steps skip the
-	# checkbox entirely; they're button-only.
-	if step.is_optional:
-		pass  # button-only row, see below
-	elif step.action == SteamRollerStep.Action.INPUT:
-		_build_input_header()
-	else:
-		_build_checkbox_header()
-
-	# Status (for missing requirements). Only show on non-optional steps.
-	if not step.is_optional and runner.missing_requirements.has(step.id):
-		_status_label = Label.new()
-		_status_label.text = "Missing: " + str(runner.missing_requirements[step.id])
-		_status_label.modulate = Color(1, 0.7, 0.3)
-		_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		add_child(_status_label)
-
-	# Description (only if non-empty and not optional).
-	if not step.is_optional and not step.description.is_empty():
-		_description_label = RichTextLabel.new()
-		_description_label.bbcode_enabled = true
-		_description_label.fit_content = true
-		_description_label.scroll_active = false
-		_apply_editor_mono_font(_description_label)
-		_description_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		add_child(_description_label)
-		_refresh_description()
-
-	# Button row (only for actions with a button). Always created as an
-	# HFlowContainer so optional buttons can be appended later.
+	_row_key = "row_%d" % get_instance_id()
+	_hosted.append(_row_key)
+	if step.action == SteamRollerStep.Action.INPUT:
+		_build_input()
+	elif not step.display_name.is_empty():
+		_build_checkbox()
+	if runner.missing_requirements.has(step.id):
+		var missing := Label.new()
+		missing.text = "Missing: " + runner.missing_requirements[step.id]
+		missing.add_theme_color_override("font_color", get_theme_color("warning_color", "Editor"))
+		missing.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		add_child(missing)
+	if not step.description.is_empty():
+		_description = RichTextLabel.new()
+		_description.bbcode_enabled = true
+		_description.fit_content = true
+		_description.scroll_active = false
+		_description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_apply_mono_font(_description)
+		add_child(_description)
+	_build_body()
 	if step.has_action_button():
-		_button_flow = HFlowContainer.new()
-		_button_flow.alignment = HFlowContainer.ALIGNMENT_CENTER
-		_button_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		add_child(_button_flow)
-		_add_buttons_for(step, _button_flow)
-
-	# Console (only for non-optional actions that produce output).
-	if not step.is_optional:
-		if not step.id.is_empty() and not _hosted_ids.has(step.id):
-			_hosted_ids.append(step.id)
-		_ensure_console(step)
-
-	# Subscribe to runner state changes after everything is built.
+		_add_buttons(step)
+	_take(step)
 	runner.step_state_changed.connect(_on_state_changed)
 	runner.log_line_emitted.connect(_on_log_line)
-	# Nothing is clickable while any step runs, now that steps no longer block.
-	runner.busy_changed.connect(_on_busy_changed)
-	if step.action == SteamRollerStep.Action.INPUT:
-		runner.step_input_set.connect(_on_step_input_set)
-	if not step.description.is_empty():
-		runner.variables_changed.connect(_on_variables_changed)
-
+	runner.busy_changed.connect(func(_busy: bool) -> void: _refresh())
+	runner.variables_changed.connect(_refresh_description)
+	runner.reset_requested.connect(_on_reset)
 	_refresh()
 
 
-# --- Header builders -------------------------------------------------------
+## Show `extra`'s buttons in this row: its attach_to names this row's step. It
+## keeps its own id, completion, gating and console output (shown here).
+func attach(extra: SteamRollerStep) -> void:
+	if extra.new_button_row:
+		_flow = null
+	if extra.has_action_button():
+		_add_buttons(extra)
+	_take(extra)
+	_refresh()
 
-func _build_checkbox_header() -> void:
+
+# --- Overridden by row types with more to show (SteamRollerRenderPanel) ---------
+
+## Add controls between the description and the buttons.
+func _build_body() -> void:
+	pass
+
+
+## More params for a button's step when it is pressed.
+func _overrides_for(_e: ButtonEntry) -> Dictionary:
+	return {}
+
+
+## Whether a button may run now, beyond its step's gates.
+func _can_run(_e: ButtonEntry) -> bool:
+	return true
+
+
+# --- Building ----------------------------------------------------------------------
+
+func _build_checkbox() -> void:
 	_checkbox = CheckBox.new()
 	_checkbox.text = step.display_name
+	_checkbox.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_checkbox.toggled.connect(_on_checkbox_toggled)
+	_checkbox.toggled.connect(func(on: bool) -> void: runner.set_completed(step.id, on))
 	add_child(_checkbox)
 
 
-func _build_input_header() -> void:
-	var hbox := HBoxContainer.new()
-	add_child(hbox)
+func _build_input() -> void:
+	var row := HBoxContainer.new()
+	add_child(row)
 	var label := Label.new()
 	label.text = step.display_name
-	hbox.add_child(label)
+	row.add_child(label)
 	_input = LineEdit.new()
 	_input.placeholder_text = step.placeholder
 	_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	var initial := step.default_value
-	if not step.project_setting_path.is_empty() \
-			and ProjectSettings.has_setting(step.project_setting_path):
-		var stored := str(ProjectSettings.get_setting(step.project_setting_path))
-		if not stored.is_empty():
-			initial = stored
-	_input.text = initial
-	hbox.add_child(_input)
-
-	if not step.target_variable.is_empty():
-		runner.set_variable(step.target_variable, initial)
-	_input.text_changed.connect(_on_input_text_changed)
-
-	var initially_complete := (not step.require_non_empty) or (not initial.is_empty())
-	runner.set_completed(step.id, initially_complete)
+	_input.text = runner.input_value(step)
+	row.add_child(_input)
+	# Each keystroke updates the setting in memory (descriptions follow at once);
+	# project.godot is written when the field is left, on Enter, or before a step runs.
+	_input.text_changed.connect(func(text: String) -> void: runner.set_input(step, text))
+	_input.text_submitted.connect(func(_text: String) -> void: runner.save_settings())
+	_input.focus_exited.connect(runner.save_settings)
+	runner.set_completed(step.id, step.input_complete(_input.text))
 
 
-# --- Button factory --------------------------------------------------------
-
-## Build every button `target_step` declares and add them to `flow`. A step
-## normally declares one; EXPORT_PROJECT declares Debug and Release. Each
-## button captures its own step and param overrides, so one row can host
-## buttons for several steps.
-func _add_buttons_for(target_step: SteamRollerStep, flow: HFlowContainer) -> void:
-	# Only the row's own non-optional step drives completion. Optional buttons
-	# are shortcuts: they gate nothing and are always enabled.
-	var is_main := (target_step == step) and not target_step.is_optional
-	var specs := target_step.get_button_specs()
-	for spec in specs:
-		var btn := Button.new()
-		btn.text = str(spec.get("label", ""))
-		# Two buttons have to share the width of a narrow dock.
-		btn.custom_minimum_size = Vector2(150.0 if specs.size() > 1 else 180.0, 0.0)
-		var entry := {
-			"button": btn,
-			"step": target_step,
-			"overrides": spec.get("overrides", {}),
-			"marks_completion": is_main,
-			"label": btn.text,
-		}
-		_buttons.append(entry)
-		btn.pressed.connect(_on_any_button_pressed.bind(entry))
-		flow.add_child(btn)
-	if not target_step.id.is_empty() and not _hosted_ids.has(target_step.id):
-		_hosted_ids.append(target_step.id)
+func _add_buttons(target: SteamRollerStep) -> void:
+	if _flow == null:
+		_flow = HFlowContainer.new()
+		_flow.alignment = FlowContainer.ALIGNMENT_CENTER
+		_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		add_child(_flow)
+		if _console:
+			move_child(_console, -1)
+	var width := runner.config.button_min_width if runner.config else 160
+	for spec in target.get_button_specs():
+		var e := ButtonEntry.new()
+		e.step = target
+		e.label = str(spec.get("label", ""))
+		e.overrides = spec.get("overrides", {})
+		e.button = Button.new()
+		e.button.text = e.label
+		e.button.custom_minimum_size = Vector2(width, 0)
+		e.button.pressed.connect(_on_pressed.bind(e))
+		_flow.add_child(e.button)
+		_buttons.append(e)
 
 
-## Give this row a console if `src_step` produces output and it has none yet.
-## Optional push buttons attach to rows (like a plain checkbox) that would
-## otherwise have nowhere to show the output those pushes now stream.
-func _ensure_console(src_step: SteamRollerStep) -> void:
-	if _console != null or not src_step.produces_output():
-		return
-	_console = ConsoleScene.instantiate()
-	add_child(_console)
-
-
-func _set_buttons_disabled(value: bool) -> void:
-	for e in _buttons:
-		var b: Button = e["button"]
-		if is_instance_valid(b):
-			b.disabled = value
-
-
-# --- Event handlers --------------------------------------------------------
-
-func _on_checkbox_toggled(value: bool) -> void:
-	runner.set_completed(step.id, value)
-
-
-func _on_input_text_changed(new_text: String) -> void:
-	if not step.target_variable.is_empty():
-		runner.set_variable(step.target_variable, new_text)
-	if not step.project_setting_path.is_empty():
-		ProjectSettings.set_setting(step.project_setting_path, new_text)
-		ProjectSettings.save()
-	var is_complete := (not step.require_non_empty) or (not new_text.is_empty())
-	runner.set_completed(step.id, is_complete)
-
-
-func _on_step_input_set(changed_id: String, new_value: String) -> void:
-	if _input and step.id == changed_id:
-		_input.text = new_value
-
-
-## Handler for any button in this row. Only the row's own non-optional step
-## updates completion; optional buttons gate nothing. Every button in the row
-## is disabled for the duration, so a second export or upload cannot be
-## launched on top of the first.
-func _on_any_button_pressed(entry: Dictionary) -> void:
-	var target_step: SteamRollerStep = entry["step"]
-	var btn: Button = entry["button"]
+## Take `s` into the row: watch its gates, show its output.
+func _take(s: SteamRollerStep) -> void:
+	_watched[s.id] = true
+	for dep in s.depends_on:
+		_watched[dep] = true
+	for dep in s.depends_on_any:
+		_watched[dep] = true
+	if not s.id.is_empty() and not _hosted.has(s.id):
+		_hosted.append(s.id)
+	if _console == null and s.produces_output():
+		_console = ConsoleScene.instantiate()
+		add_child(_console)
 	if _console:
-		_console.clear_log()
-	_set_buttons_disabled(true)
-	btn.text = "Running..."
-	# Route output to this row's console whichever button was pressed, so an
-	# optional step attached here streams into the row the user clicked.
-	var console_id := ""
-	if _console != null:
-		console_id = step.id if not step.id.is_empty() else target_step.id
-	var ok: bool = await runner.execute_step(target_step, entry["overrides"], console_id)
-	if not is_instance_valid(btn) or not is_inside_tree():
-		return  # the row was rebuilt while the step ran
-	btn.text = str(entry["label"])
-	if bool(entry["marks_completion"]):
-		runner.set_completed(step.id, ok)
-	elif not ok:
-		push_error("[SteamRoller] Optional action '%s' failed." % str(entry["label"]))
-	_refresh()
+		move_child(_console, -1)
 
 
-func _on_state_changed(changed_id: String) -> void:
-	if changed_id == step.id or step.depends_on.has(changed_id):
+# --- Running -----------------------------------------------------------------------
+
+func _on_pressed(e: ButtonEntry) -> void:
+	if e == _running:
+		runner.stop()
 		_refresh()
+		return
+	var question := runner.vars.resolve(e.step.confirmation())
+	if question.is_empty():
+		_run(e)
+		return
+	if _confirm == null:
+		_confirm = ConfirmationDialog.new()
+		_confirm.title = "SteamRoller"
+		_confirm.confirmed.connect(_on_confirmed)
+		_confirm.canceled.connect(func() -> void: _pending = null)
+		add_child(_confirm)
+	_pending = e
+	_confirm.dialog_text = question
+	_confirm.popup_centered()
 
 
-func _on_variables_changed() -> void:
-	_refresh_description()
+func _on_confirmed() -> void:
+	var e := _pending
+	_pending = null
+	if e != null:
+		_run(e)
 
 
-func _on_log_line(target_id: String, line: String) -> void:
-	# Accept output from this row's own step and from any optional step whose
-	# button this row hosts - those have no console of their own.
-	if _console and _hosted_ids.has(target_id):
-		_console.append(line)
-
-
-func _on_busy_changed(_busy: bool) -> void:
+func _run(e: ButtonEntry) -> void:
+	# An instant step runs beside whatever is running: it neither clears the
+	# console nor turns its button into Stop.
+	if not e.step.is_instant():
+		if _console:
+			_console.clear_log()
+		_running = e
+	var overrides := e.overrides.duplicate()
+	overrides.merge(_overrides_for(e), true)
+	var ok: bool = await runner.execute_step(e.step, overrides, _console_key(e))
+	if not is_instance_valid(e.button) or not is_inside_tree():
+		return   # the dock was rebuilt while the step ran
+	if _running == e:
+		_running = null
+	if e.step.marks_completion():
+		runner.set_completed(e.step.id, ok)
 	_refresh()
 
+
+## The console a button's output goes to: the row's step, else the button's.
+func _console_key(e: ButtonEntry) -> String:
+	if not step.id.is_empty():
+		return step.id
+	if not e.step.id.is_empty():
+		return e.step.id
+	return _row_key
+
+
+# --- Refresh -------------------------------------------------------------------------
 
 func _refresh() -> void:
-	if _checkbox:
-		var done := runner.is_completed(step.id)
-		if _checkbox.button_pressed != done:
-			_checkbox.set_pressed_no_signal(done)
+	if _checkbox and _checkbox.button_pressed != runner.is_completed(step.id):
+		_checkbox.set_pressed_no_signal(runner.is_completed(step.id))
 	var busy := runner.is_busy()
-	# Exports lock once complete: they overwrite their destination, so they are
-	# one-shot until Reset-and-increment restarts the checklist.
-	var locked := step.locks_when_completed() and runner.is_completed(step.id)
 	for e in _buttons:
-		var b: Button = e["button"]
-		if not is_instance_valid(b):
+		if not is_instance_valid(e.button):
 			continue
-		var s: SteamRollerStep = e["step"]
-		# Main buttons are gated by dependencies; optional buttons are always
-		# available - but nothing is clickable while a step is running.
-		var gated: bool = (s == step) and not s.is_optional and not runner.is_enabled(s)
-		b.disabled = busy or gated or (locked and bool(e["marks_completion"]))
+		if e == _running:
+			var stopping := runner.stop_requested()
+			e.button.text = "Stopping…" if stopping else "Stop"
+			e.button.icon = null
+			e.button.disabled = stopping
+			e.button.tooltip_text = "" if stopping else "Stop this step, and whatever it started"
+			continue
+		var s := e.step
+		var why := runner.blocked_reason(s)
+		var locked := s.locks_when_completed() and runner.is_completed(s.id)
+		e.button.text = e.label
+		e.button.disabled = (busy and not s.is_instant()) or not why.is_empty() or locked \
+			or not _can_run(e)
+		if not why.is_empty():
+			e.button.tooltip_text = why
+		elif locked:
+			e.button.tooltip_text = "Done for this version: Reset unlocks it."
+		else:
+			e.button.tooltip_text = ""
+		# An attached step's tick shows on its button (the row's checkbox is the
+		# row's own step).
+		var done := s != step and s.marks_completion() and runner.is_completed(s.id)
+		e.button.icon = get_theme_icon("StatusSuccess", "EditorIcons") if done else null
 	_refresh_description()
 
 
 func _refresh_description() -> void:
-	if _description_label == null:
-		return
-	_description_label.text = runner.resolve_display(step.description)
+	if _description:
+		_description.text = runner.vars.resolve_display(step.description)
 
 
-static func _apply_editor_mono_font(label: RichTextLabel) -> void:
+func _on_state_changed(step_id: String) -> void:
+	if _watched.has(step_id):
+		_refresh()
+
+
+func _on_log_line(console_id: String, line: String) -> void:
+	if _console and _hosted.has(console_id):
+		_console.append(line)
+
+
+func _on_reset() -> void:
+	if _console:
+		_console.clear_log()
+	if _input:
+		_input.text = runner.input_value(step)
+		runner.set_completed(step.id, step.input_complete(_input.text))
+
+
+static func _apply_mono_font(label: RichTextLabel) -> void:
 	if not Engine.is_editor_hint():
 		return
 	var base := EditorInterface.get_base_control()
@@ -317,5 +301,5 @@ static func _apply_editor_mono_font(label: RichTextLabel) -> void:
 		label.add_theme_font_override("mono_font", mono)
 	var settings := EditorInterface.get_editor_settings()
 	if settings:
-		var font_size: int = int(settings.get_setting("interface/editor/main_font_size"))
+		var font_size: int = settings.get_setting("interface/editor/main_font_size")
 		label.add_theme_font_size_override("mono_font_size", font_size)

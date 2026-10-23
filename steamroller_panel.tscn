@@ -34,7 +34,13 @@ horizontal_alignment = 1
 
 [node name="DemoToggle" type="CheckButton" parent="V/Header" unique_id=871951652]
 layout_mode = 2
+tooltip_text = "Editor runs of the game show the demo (games read application/steamroller/demo_mode in editor runs)."
 text = "Demo"
+
+[node name="Reload" type="Button" parent="V/Header"]
+layout_mode = 2
+tooltip_text = "Read the config again from disk and rebuild the tabs. A step that is running is stopped and abandoned first."
+text = "Reload"
 
 [node name="Status" type="Label" parent="V" unique_id=990648068]
 visible = false
@@ -53,7 +59,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
-metadata/_tab_index = 2
 
 [node name="Instructions" parent="V/Tabs/Start Guide" unique_id=1197000131 instance=ExtResource("2_instructions")]
 layout_mode = 2

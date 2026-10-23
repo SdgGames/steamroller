@@ -1,155 +1,172 @@
 @tool
 class_name SteamRollerStep extends Resource
-## A single step in a SteamRoller workflow.
+## One step of a SteamRoller checklist.
 ##
-## All step variations are expressed as one resource with an `action` enum.
-## Fields irrelevant to the chosen action are simply ignored.
+## Every kind of step is this one resource; `action` says what it does, and the
+## fields that action does not use are ignored. A step renders as one row:
 ##
-## Layout per row in the UI:
-##   [Checkbox]  Step name              <- always present, except NEW_TAB (skipped)
-##                                          and INPUT (replaced by LineEdit)
-##   <description RichTextLabel>        <- only if `description` is non-empty
-##         [ Action button ]            <- only for actions that DO something
-##   <per-step console output>          <- only for RUN_COMMAND and built-ins
-##                                          that produce output
+##   [x] Display name           a checkbox (INPUT: a label and a text field;
+##                              a step with no display name has no header)
+##   description                BBCode, ${NAME} variables resolved
+##        [ Button ] [ ... ]    the step's own buttons, then those of every
+##                              step attached to it (attach_to)
+##   console                    the output of the row's steps, hidden until
+##                              there is some
+##
+## A step with `attach_to` set renders no row of its own: its buttons join the
+## named step's row. It keeps its own id, completion, gating and output.
 
+## What a step does. The values are stored as numbers in config files, so a new
+## action is only ever appended, and none is ever renumbered.
 enum Action {
-	## Manual checkbox. No-op action — the user just ticks it when done.
-	CHECKBOX,
-	## Tab divider. Steps after this are placed in a new tab named `tab_name`.
-	NEW_TAB,
-	## Text input bound to a project setting. The field itself is the
-	## completion signal (non-empty = done, if require_non_empty is true).
-	INPUT,
-	## Run all GdUnit4 tests. Disabled with a warning if GdUnit is not present.
-	RUN_GDUNIT,
-	## Movie maker mode + main scene playback + optional ffmpeg re-encode.
-	## params: { "output_path": String, "reencode": bool }
-	RECORD_MOVIE,
-	## Recursively delete a folder, then optionally recreate paths.
+	## A manual checkbox: tick it when the thing is done.
+	CHECKBOX = 0,
+	## A tab divider: the steps after it go on a new tab named `tab_name`.
+	NEW_TAB = 1,
+	## A text field bound to a project setting and a variable. It is complete
+	## when it holds text (unless require_non_empty is off).
+	INPUT = 2,
+	## Run every GdUnit4 test. Disabled when GdUnit4 is not installed.
+	RUN_GDUNIT = 3,
+	## Play the main scene under Movie Maker, then optionally re-encode the
+	## film with ffmpeg. params: { "output_path": String, "reencode": bool,
+	## "crf": int = 23, "preset": String = "medium", "suffix": String = "_sample.mp4" }
+	RECORD_MOVIE = 4,
+	## Delete a folder and everything in it, then optionally create folders.
 	## params: { "path": String, "paths": Array[String] (optional) }
-	DELETE_FOLDER,
-	## Create folders (idempotent). params: { "paths": Array[String] }
-	CREATE_FOLDERS,
-	## Copy folder contents to a destination via xcopy.
+	DELETE_FOLDER = 5,
+	## Create folders (existing ones are fine). params: { "paths": Array[String] }
+	CREATE_FOLDERS = 6,
+	## Copy a folder into another, newer files only (xcopy /D).
 	## params: { "source": String, "destination": String }
-	ARCHIVE_FOLDER,
-	## Recursively delete user://. No params.
-	CLEAR_USER_DATA,
-	## Reveal a path in the OS file manager. params: { "path": String }
-	OPEN_IN_EXPLORER,
-	## Copy a templated string to the clipboard. params: { "text": String }
-	COPY_TO_CLIPBOARD,
-	## Reset completion state for steps in the current tab, then increment
-	## the last numeric segment of application/config/version.
-	RESET_AND_INCREMENT,
-	## External CLI command. Uses `executable`, `args`, `working_dir`.
-	RUN_COMMAND,
-	## Run other steps in sequence by `step_ids`. Used for "Push all" aggregates.
-	RUN_STEPS,
-	## Write the Steam `desc` field in one or more app VDF files, and
-	## optionally the `setlive` branch when `branch` is provided.
+	ARCHIVE_FOLDER = 7,
+	## Delete everything in the project's user:// folder, after a confirmation.
+	CLEAR_USER_DATA = 8,
+	## Open a folder in the file manager. params: { "path": String,
+	## "create": bool = false (make the folder first when it is missing) }
+	OPEN_IN_EXPLORER = 9,
+	## Copy text to the clipboard. params: { "text": String }
+	COPY_TO_CLIPBOARD = 10,
+	## Add one to the last number of the version, clear the commit message,
+	## untick every step, clear every console and show the first tab.
+	RESET_AND_INCREMENT = 11,
+	## Run a program: `executable`, `args`, `working_dir`.
+	RUN_COMMAND = 12,
+	## Run other steps in order (`step_ids`); a step that is not yet enabled is
+	## skipped. Each one that runs is ticked or unticked by its result.
+	RUN_STEPS = 13,
+	## Write the Steam build description (and optionally the branch it goes
+	## live on) into app build VDF files.
 	## params: { "files": Array[String], "desc": String, "branch": String (optional) }
-	WRITE_VDF_DESC,
-	## Export the project using the Godot headless CLI, mirroring the editor's
-	## "Export All" button: every preset in res://export_presets.cfg is exported
-	## to its own `export_path`. Renders two buttons (Debug and Release).
-	## params: {
-	##   "debug": bool (optional) — pin a single mode and render one button
-	##                              instead of two; the buttons set this
-	##                              themselves when it is absent.
-	##   "exports": Array[Dictionary] (optional) — override the preset list with
-	##              explicit { "preset": String, "output": String } entries
-	##              instead of reading export_presets.cfg.
-	## }
-	EXPORT_PROJECT,
-	## Deprecated — RUN_COMMAND no longer blocks the editor and additionally
-	## captures output and honours `working_dir`, so prefer it. Kept for configs
-	## that rely on this action's exact contract: no shell, `working_dir`
-	## ignored, output only via `tail_file`.
-	## params: { "tail_file": String (optional) } — file tailed into the step
-	## console while the process runs.
-	RUN_COMMAND_ASYNC,
+	WRITE_VDF_DESC = 14,
+	## Export headlessly, like the editor's Export All: two buttons, Debug and
+	## Release, each exporting every preset to its own export path.
+	## params: { "debug": bool (optional: one button, that mode),
+	##           "exports": Array[{ "preset": String, "output": String }] (optional) }
+	EXPORT_PROJECT = 15,
+	## Removed in 0.3: runs as RUN_COMMAND. Kept so old configs still load.
+	RUN_COMMAND_ASYNC = 16,
+	## Turn files into videos (or anything else) in a batch: the row lists what
+	## it finds under `render_scan_dirs`, and runs every selected input through
+	## every ticked `render_jobs` entry, one after the other. See the README.
+	RENDER_QUEUE = 17,
 }
 
-## Stable identifier. Referenced by `depends_on` in other steps. Optional
-## for CHECKBOX/NEW_TAB but required if anything depends on this step.
+## Stable identifier: what `depends_on`, `attach_to` and `step_ids` name. A
+## step with no id cannot be ticked, gated on, or attached to.
 @export var id: String = ""
 
-## Action this step performs.
+## What this step does.
 @export var action: Action = Action.CHECKBOX
 
-## Display name shown in the row header.
+## Header text: the checkbox's, or the INPUT field's label.
 @export var display_name: String = ""
 
-## Optional BBCode description shown as a RichTextLabel below the header.
-## Variable substitution applies, so [color=cyan]${BUILDS_DIR}[/color] works.
+## BBCode shown under the header. ${NAME} variables are resolved, so
+## [color=cyan]${BUILDS_DIR}[/color] shows the real folder.
 @export_multiline var description: String = ""
 
-## IDs of other steps that must be completed before this one is enabled.
+## Steps that must all be ticked before this step's buttons are enabled.
 @export var depends_on: PackedStringArray = []
 
-## Action button label. Defaults are provided per action — leave empty to use
-## the default ("Run unit tests", "Record gameplay", etc.).
+## Steps of which at least one must be ticked before this step's buttons are
+## enabled (an "either one" gate). Applies together with depends_on.
+@export var depends_on_any: PackedStringArray = []
+
+## Button text. Empty = the action's default ("Run unit tests", ...).
 @export var button_label: String = ""
 
-## Optional shortcut button. If true, this step:
-##   - renders no checkbox, description, or separator
-##   - stacks its button into the previous step's button row (or creates a
-##     new orphan row if there's no previous row to attach to)
-##   - does not gate other steps and is not tracked in completion state
-##   - suppresses per-step console output on success (errors still print
-##     via push_warning / push_error to the editor output)
-##
-## Use this for shortcuts like "Open build folder" or "Clear user data".
-@export var is_optional: bool = false
+## The id of the step whose row shows this step's buttons. Such a step has no
+## row of its own, but keeps its own id, completion, gating and output.
+@export var attach_to: String = ""
 
-## When true (and is_optional is also true), always starts a new button row
-## rather than appending to the previous row's flow container.
+## Attached steps only: start a new line of buttons in the host row.
 @export var new_button_row: bool = false
 
-## Action-specific parameters. String values pass through variable
-## substitution before execution. See enum docs above for expected keys.
+## A question asked before the step runs (OK runs it, Cancel does not).
+## Variables apply. Empty = no question; CLEAR_USER_DATA always asks.
+@export_multiline var confirm_text: String = ""
+
+## Action-specific parameters (see Action). Strings, also inside arrays and
+## dictionaries, are resolved before the step runs.
 @export var params: Dictionary = {}
 
-# --- Action-specific fields ------------------------------------------------
-# These could go in `params`, but they're common enough that exporting them
-# directly makes the inspector friendlier.
-
-## INPUT: variable name (without ${}) that this input writes into the
-## runtime variable bag.
 @export_group("Input")
+## INPUT: the variable (without ${}) the field's text is available as.
 @export var target_variable: String = ""
-## INPUT: project setting path the field persists to.
+## INPUT: the project setting the field reads and writes.
 @export var project_setting_path: String = ""
-## INPUT: default value if the project setting is empty.
+## INPUT: written to the setting when the setting is empty.
 @export var default_value: String = ""
-## INPUT: placeholder text shown when the field is empty.
+## INPUT: grey text shown while the field is empty.
 @export var placeholder: String = ""
-## INPUT: require non-empty input for the step to count as complete.
+## INPUT: the step counts as done only while the field holds text.
 @export var require_non_empty: bool = true
 
 @export_group("Run Command")
-## RUN_COMMAND: path to the executable. May use ${VAR} substitution.
+## RUN_COMMAND: the program. Variables apply.
 @export var executable: String = ""
-## RUN_COMMAND: arguments. Each entry may use ${VAR} substitution.
+## RUN_COMMAND: its arguments, one per entry. Variables apply to each.
 @export var args: PackedStringArray = []
-## RUN_COMMAND: working directory. Empty = project root.
+## RUN_COMMAND: working directory. Empty = the editor's own.
 @export var working_dir: String = ""
-## RUN_COMMAND: treat non-zero exit code as failure.
+## RUN_COMMAND: a non-zero exit code fails the step.
 @export var require_zero_exit: bool = true
 
 @export_group("Run Steps")
-## RUN_STEPS: ordered IDs of other steps to execute in sequence.
+## RUN_STEPS: the ids of the steps to run, in order.
 @export var step_ids: PackedStringArray = []
 
 @export_group("New Tab")
-## NEW_TAB: name for the new tab.
+## NEW_TAB: the new tab's name.
 @export var tab_name: String = ""
 
+@export_group("Render Queue")
+## RENDER_QUEUE: folders to look in. Each one's subfolders that hold inputs
+## become the row's source choices (newest first). Variables apply.
+@export var render_scan_dirs: PackedStringArray = []
+## RENDER_QUEUE: which files are inputs, as a file-name pattern ("*.tape").
+@export var render_pattern: String = ""
+## RENDER_QUEUE: also list each folder that holds inputs, as one input.
+@export var render_include_folders: bool = false
+## RENDER_QUEUE: where the results go: the jobs' ${OUT_DIR}. Variables apply.
+@export var render_out_dir: String = ""
+## RENDER_QUEUE: where each job's scratch folder (${WORK_DIR}) is made.
+## Empty = a folder in the OS cache directory. Variables apply.
+@export var render_work_dir: String = ""
+## RENDER_QUEUE: project settings that hold while any job runs, as
+## { "section/key": value }; each job can add to them (SteamRollerRenderJob).
+@export var render_settings: Dictionary = {}
+## RENDER_QUEUE: the outputs on offer, one checkbox each.
+@export var render_jobs: Array[SteamRollerRenderJob] = []
 
-## Default button label for actions that show an action button.
-## Returns "" for actions that don't need a button (CHECKBOX, NEW_TAB, INPUT).
+## Configs written for SteamRoller 0.2 marked a step that joins the row above
+## as optional. It still works that way; attach_to is the way to say it now.
+@export_storage var is_optional: bool = false
+
+
+## The button text an action gets when `button_label` is empty, or "" for an
+## action with no button.
 func get_default_button_label() -> String:
 	match action:
 		Action.RUN_GDUNIT: return "Run unit tests"
@@ -158,63 +175,78 @@ func get_default_button_label() -> String:
 		Action.CREATE_FOLDERS: return "Create folders"
 		Action.ARCHIVE_FOLDER: return "Archive build"
 		Action.CLEAR_USER_DATA: return "Clear user data"
-		Action.OPEN_IN_EXPLORER: return "Open in file manager"
+		Action.OPEN_IN_EXPLORER: return "Open folder"
 		Action.COPY_TO_CLIPBOARD: return "Copy to clipboard"
 		Action.RESET_AND_INCREMENT: return "Reset and increment version"
-		Action.RUN_COMMAND: return "Run command"
-		Action.RUN_COMMAND_ASYNC: return "Run command"
+		Action.RUN_COMMAND, Action.RUN_COMMAND_ASYNC: return "Run command"
 		Action.RUN_STEPS: return "Run all"
 		Action.WRITE_VDF_DESC: return "Write VDF description"
 		Action.EXPORT_PROJECT: return "Export All"
-		_: return ""
+		Action.RENDER_QUEUE: return "Render selected"
+	return ""
 
 
-## The buttons this step renders, in display order. Each entry is:
-##   label     : String     — button text
-##   overrides : Dictionary — merged over the step's resolved `params` when the
-##                            button is pressed
-##
-## Most actions return exactly one entry. EXPORT_PROJECT returns Debug and
-## Release, mirroring the editor's own "Export All" prompt — set params.debug
-## explicitly to pin a single mode and get a single button back.
+## The buttons this step shows, in order, as { "label": String,
+## "overrides": Dictionary (merged over the resolved params when pressed) }.
+## EXPORT_PROJECT shows Debug and Release unless params.debug pins one mode.
 func get_button_specs() -> Array[Dictionary]:
 	var specs: Array[Dictionary] = []
 	var default_label := get_default_button_label()
 	if default_label.is_empty():
 		return specs
 	var base := button_label if not button_label.is_empty() else default_label
-	match action:
-		Action.EXPORT_PROJECT:
-			if params.has("debug"):
-				specs.append({"label": base, "overrides": {}})
-			else:
-				specs.append({"label": "%s Debug" % base, "overrides": {"debug": true}})
-				specs.append({"label": "%s Release" % base, "overrides": {"debug": false}})
-		_:
-			specs.append({"label": base, "overrides": {}})
+	if action == Action.EXPORT_PROJECT and not params.has("debug"):
+		specs.append({"label": "%s Debug" % base, "overrides": {"debug": true}})
+		specs.append({"label": "%s Release" % base, "overrides": {"debug": false}})
+	else:
+		specs.append({"label": base, "overrides": {}})
 	return specs
 
 
-## True if this action has a button the user can press to execute it.
 func has_action_button() -> bool:
-	return not get_button_specs().is_empty()
+	return not get_default_button_label().is_empty()
 
 
-## True if this step's buttons stay disabled once it is marked complete, until
-## the checklist is reset. Exports are expensive and overwrite their
-## destination, so they are one-shot per version.
+## True when this step's buttons stay disabled once it is ticked, until the
+## checklist is reset: exports overwrite their destination, so they run once
+## per version.
 func locks_when_completed() -> bool:
 	return action == Action.EXPORT_PROJECT
 
 
-## True if this action produces console output worth showing.
+## True when the action writes to a console.
 func produces_output() -> bool:
 	match action:
-		Action.RUN_GDUNIT, Action.RECORD_MOVIE, Action.DELETE_FOLDER, \
-		Action.CREATE_FOLDERS, Action.ARCHIVE_FOLDER, Action.CLEAR_USER_DATA, \
-		Action.COPY_TO_CLIPBOARD, Action.RESET_AND_INCREMENT, Action.RUN_COMMAND, \
-		Action.RUN_STEPS, Action.WRITE_VDF_DESC, Action.EXPORT_PROJECT, \
-		Action.RUN_COMMAND_ASYNC:
-			return true
-		_:
+		Action.CHECKBOX, Action.NEW_TAB, Action.INPUT:
 			return false
+	return true
+
+
+## True for actions that finish at once and touch nothing a running step uses:
+## they stay available while another step runs.
+func is_instant() -> bool:
+	match action:
+		Action.OPEN_IN_EXPLORER, Action.COPY_TO_CLIPBOARD:
+			return true
+	return false
+
+
+## True when running the step ticks (or, on failure, unticks) it.
+func marks_completion() -> bool:
+	return not id.is_empty() and action != Action.RESET_AND_INCREMENT
+
+
+## The question asked before running, unresolved ("" = none).
+func confirmation() -> String:
+	if not confirm_text.is_empty():
+		return confirm_text
+	if action == Action.CLEAR_USER_DATA:
+		return ("Delete everything in ${USER_DIR}?\n\nThat is this project's user data "
+			+ "folder: saves, settings and logs. Anything else that saves there, such "
+			+ "as an installed copy of the game, loses its data too.")
+	return ""
+
+
+## INPUT: whether `text` makes the step complete.
+func input_complete(text: String) -> bool:
+	return not require_non_empty or not text.is_empty()

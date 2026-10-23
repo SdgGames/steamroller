@@ -1,73 +1,86 @@
 @tool
-class_name SteamRollerConsole extends RichTextLabel
-## Per-step console log.
+class_name SteamRollerConsoleOutput extends RichTextLabel
+## A row's console: the output of the steps the row runs.
 ##
-## Hidden when empty. Once a line is appended it becomes visible and grows with
-## its content, from `min_lines` high up to `max_visible_lines`; past that it
-## keeps its height and scrolls internally as more arrive. External processes
-## stream their output here live while they run.
+## Hidden while empty. It grows with its content from min_lines up to
+## max_visible_lines high, then scrolls. Lines starting "[err]" are coloured.
 
-## Height, in text lines, of a console with (almost) nothing in it.
+## Height in lines of a console with (almost) nothing in it.
 @export_range(1, 20) var min_lines: int = 1
-## Tallest the console grows before it scrolls instead.
+## Tallest the console grows before it scrolls.
 @export_range(1, 40) var max_visible_lines: int = 4
+## Lines kept before the console starts over (the log file has every line).
+@export_range(50, 10000) var max_lines: int = 800
+## Padding under the last line (px), so descenders are not clipped.
+@export_range(0, 16) var pad_px: int = 4
+## Narrower than this (px) the console has not been laid out yet, and its
+## wrapped height means nothing.
+@export_range(0.0, 400.0) var min_layout_width: float = 50.0
+## Colour of lines that start "[err]".
+@export var error_color: Color = Color(1.0, 0.45, 0.45)
 
-## Upper bound on retained lines. A chatty tool can emit thousands; the full
-## text is always in the log file the runner names in the Output panel.
-const MAX_LINES := 800
-
-## Vertical padding so descenders on the last line are not clipped.
-const PAD_PX := 4
-
-## Narrower than this and the label has not been laid out by its container
-## yet (a hidden control keeps a token width), so its wrapped height is noise.
-const MIN_LAYOUT_WIDTH := 50.0
-
-var _line_count: int = 0
+## The lines shown, kept to redraw the console when a heartbeat replaces the last one.
+var _lines := PackedStringArray()
+var _last_was_heartbeat := false
 
 
 func _ready() -> void:
 	bbcode_enabled = true
 	scroll_following = true
 	selection_enabled = true
-	custom_minimum_size = Vector2(0, _line_height() * min_lines + PAD_PX)
+	custom_minimum_size = Vector2(0, _line_height() * min_lines + pad_px)
 	visible = false
 	# Wrapped height depends on width: refit when the dock is resized, and when
 	# the container first lays the console out after it becomes visible.
 	resized.connect(_fit_height)
 
 
-## Append one line of process output. Uses add_text(), NOT append_text():
-## the latter parses BBCode, which would swallow or mangle any "[" in the
-## output of tools like butler and steamcmd.
+## Append one line. A heartbeat right after a heartbeat replaces it, so a long
+## run shows one line that ticks.
 func append(line: String) -> void:
-	if not visible:
-		visible = true
-	if _line_count >= MAX_LINES:
-		clear()
-		_line_count = 0
-		add_text("… earlier output trimmed (see the log file) …")
-		newline()
-	# Lines are separated, not terminated, so there is no empty last paragraph
-	# adding a phantom line to the content height.
-	if _line_count > 0:
-		newline()
-	if line.begins_with("[err]"):
-		push_color(Color(1.0, 0.45, 0.45))
-		add_text(line)
-		pop()
-	else:
-		add_text(line)
-	_line_count += 1
-	# The laid-out height is only known once the text has been shaped.
+	visible = true
+	var heartbeat := line.begins_with(SteamRollerShell.HEARTBEAT_PREFIX)
+	if heartbeat and _last_was_heartbeat and not _lines.is_empty():
+		_lines[_lines.size() - 1] = line
+		_redraw()
+		return
+	_last_was_heartbeat = heartbeat
+	if _lines.size() >= max_lines:
+		_lines = PackedStringArray(["… earlier output trimmed (the log file has it all) …"])
+		_redraw()
+	_lines.append(line)
+	_add(line, _lines.size() > 1)
+	# The height is only known once the text has been shaped.
 	_fit_height.call_deferred()
 
 
 func clear_log() -> void:
 	clear()
-	_line_count = 0
-	custom_minimum_size.y = _line_height() * min_lines + PAD_PX
+	_lines.clear()
+	_last_was_heartbeat = false
+	custom_minimum_size.y = _line_height() * min_lines + pad_px
 	visible = false
+
+
+func _redraw() -> void:
+	clear()
+	for i in _lines.size():
+		_add(_lines[i], i > 0)
+	_fit_height.call_deferred()
+
+
+## add_text(), not append_text(): tool output is full of "[" that BBCode parsing
+## would swallow. Lines are separated, not terminated: no empty last line adding
+## height.
+func _add(line: String, separate: bool) -> void:
+	if separate:
+		newline()
+	if line.begins_with("[err]"):
+		push_color(error_color)
+		add_text(line)
+		pop()
+	else:
+		add_text(line)
 
 
 func _line_height() -> float:
@@ -77,18 +90,17 @@ func _line_height() -> float:
 	return font.get_height(get_theme_default_font_size())
 
 
-## Grow to fit the content (wrapped lines included), between min_lines and
-## max_visible_lines high. A no-op until the console has a real width.
+## Fit the content (wrapped lines included), between min_lines and
+## max_visible_lines high. Waits until the console has a real width.
 func _fit_height() -> void:
-	if not is_inside_tree() or not visible or size.x < MIN_LAYOUT_WIDTH:
+	if not is_inside_tree() or not visible or size.x < min_layout_width:
 		return
 	var content := float(get_content_height())
-	# The label's real line pitch (measured: 16 px where the font reports 21),
-	# so the cap is max_visible_lines of what is actually drawn. get_line_count()
-	# counts wrapped lines, which is what we want here.
+	# The real line pitch (16 px where the font reports 21, measured), so the
+	# cap is max_visible_lines of what is actually drawn.
 	var lh := _line_height()
 	if content > 0.0:
 		lh = content / maxi(get_line_count(), 1)
-	var fitted := clampf(content + PAD_PX, lh * min_lines + PAD_PX, lh * max_visible_lines + PAD_PX)
+	var fitted := clampf(content + pad_px, lh * min_lines + pad_px, lh * max_visible_lines + pad_px)
 	if not is_equal_approx(custom_minimum_size.y, fitted):
 		custom_minimum_size.y = fitted

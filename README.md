@@ -1,139 +1,227 @@
 # SteamRoller
 
-A data-driven build and release checklist for the Godot 4 editor. Define your
-workflow as an ordered list of steps in a `.tres` config file; the plugin
-renders it as a dockable checklist with per-step consoles and dependency
-gating between steps.
+A data-driven build and release checklist for the Godot 4 editor. You write the
+workflow as an ordered list of steps in a `.tres` config; the plugin docks it as
+a checklist with buttons, a console under each row, and gates between steps.
 
-Windows-only for now.
-
-## How a step looks
-
-Each step is one `SteamRollerStep` resource with an `action` enum that
-determines its behavior. The available actions:
-
-| Action | Behavior |
-|---|---|
-| `CHECKBOX` | Manual no-op. User ticks it when done. |
-| `NEW_TAB` | Divider. Steps after it appear in a new tab named `tab_name`. |
-| `INPUT` | LineEdit bound to a project setting. The field is the completion state. |
-| `RUN_GDUNIT` | Run all GdUnit4 tests. Disabled if GdUnit isn't installed. |
-| `RECORD_MOVIE` | Movie maker + main scene + optional ffmpeg re-encode. |
-| `DELETE_FOLDER` | Recursively delete `params.path`. Optionally recreate folders via `params.paths`. |
-| `CREATE_FOLDERS` | Create each path in `params.paths`. |
-| `ARCHIVE_FOLDER` | Copy `params.source` → `params.destination`. |
-| `CLEAR_USER_DATA` | Delete `user://`. |
-| `OPEN_IN_EXPLORER` | Reveal `params.path` in the OS file manager. |
-| `COPY_TO_CLIPBOARD` | Copy `params.text` to the clipboard. |
-| `RESET_AND_INCREMENT` | Reset current tab + bump last numeric segment of version. |
-| `RUN_COMMAND` | External process using `executable`, `args`, `working_dir`. Runs without blocking the editor; its captured output is written to a log file and emitted into the step console. |
-| `RUN_STEPS` | Run other steps in sequence via `step_ids` (e.g. "Push all"). Output from every child is routed to the console of the row you pressed. |
-| `WRITE_VDF_DESC` | Update the `desc` field (and optionally the `setlive` branch) in one or more Valve VDF app-build scripts. `params.files` is an Array of absolute paths; `params.desc` is the string to write; `params.branch` (optional) sets the `setlive` branch. All support variable substitution. |
-| `EXPORT_PROJECT` | Export the project headlessly, mirroring the editor's **Export All**: renders an *Export All Debug* and an *Export All Release* button and exports every preset in `export_presets.cfg` to its own `export_path`. Relaunches the current editor binary with `--headless` and `--export-debug`/`--export-release`. `params.debug` (bool) pins one mode and renders a single button; `params.exports` (Array of `{preset, output}`) overrides the preset list. |
-| `RUN_COMMAND_ASYNC` | **Deprecated** — `RUN_COMMAND` no longer blocks either, and additionally captures output and honours `working_dir`. Kept for configs relying on this action's exact contract: no shell, `working_dir` ignored, output only via `params.tail_file` (now tailed incrementally while the process runs, rather than dumped at exit). |
-
-In the panel, each step renders as:
-
-```
-[✓] Step name
-    Optional BBCode description goes here.
-              [ Action button ]
-    ▶ Console (0)
-─────────────────────────────────────────
-```
-
-`INPUT` steps swap the checkbox header for `Label + LineEdit`. Actions with
-no button (CHECKBOX, NEW_TAB, INPUT) just show the header and description.
+Windows only for now (see *Known limits*).
 
 ## Installation
 
 1. Copy this folder into your project at `res://addons/steamroller/`.
-2. Enable in **Project → Project Settings → Plugins**.
-3. Copy `addons/steamroller/templates/default_config.tres` somewhere outside
-   the addon (e.g. `res://steamroller_config.tres`).
-4. In **Project Settings → General**, set
-   `application/steamroller/config_path` to your copy.
-5. The dock appears bottom-right. Open the **Start Guide** tab for a full
-   walkthrough with screenshots (same content as below).
+2. Enable it in **Project → Project Settings → Plugins**.
+3. Copy `addons/steamroller/templates/default_config.tres` outside the addon
+   (for example `res://steamroller_config.tres`).
+4. Point **Project Settings → Application → SteamRoller → Config Path**
+   (`application/steamroller/config_path`) at your copy.
+5. The dock appears bottom-right. Its **Start Guide** tab walks through the first
+   push to Steam with screenshots.
+
+After editing the config on disk, press **Reload** in the dock's header: it reads
+the file again and rebuilds every tab. Reload also stops and abandons a step that
+is running: the way out of a run that can no longer finish (a script error, or the
+plugin's scripts reloaded underneath it), which would otherwise keep every button
+disabled.
+
+## How a step looks
+
+Each step is one `SteamRollerStep` resource. Its `action` says what it does; the
+fields that action does not use are ignored. A step renders as one row:
+
+```
+[x] Display name               a checkbox: the step is done (INPUT: label + text field)
+    Description in BBCode,     ${NAME} variables resolved
+    paths shortened to ...
+         [ Button ] [ Button ] the step's buttons, then those of the steps attached to it
+    console                    the row's output, hidden until a line arrives
+─────────────────────────────────────────
+```
+
+A step with no `display_name` has no header line.
+
+### Step fields
+
+| Field | Meaning |
+|---|---|
+| `id` | Stable identifier: what `depends_on`, `attach_to` and `step_ids` name. A step with no id cannot be ticked, gated on or attached to. |
+| `action` | What the step does (table below). |
+| `display_name`, `description` | The header text, and BBCode under it. |
+| `depends_on` | Steps that must **all** be ticked before this step's buttons are enabled. |
+| `depends_on_any` | Steps of which **at least one** must be ticked ("record gameplay *or* copy the saves"). Applies together with `depends_on`. |
+| `button_label` | Button text; empty = the action's default. |
+| `attach_to` | The id of the step whose row shows this step's buttons. The attached step has no row of its own but keeps its own id, completion, gating and output; its button shows a check icon once it has run successfully. |
+| `new_button_row` | Attached steps only: start a new line of buttons in the host row. |
+| `confirm_text` | A question asked first; the step runs only on OK. `CLEAR_USER_DATA` always asks. |
+| `params` | Action-specific parameters (table below). Strings, also inside arrays and dictionaries, have their variables resolved. |
+
+A disabled button's tooltip says what it is waiting on.
+
+### Actions
+
+| Action (stored value) | What it does | `params` |
+|---|---|---|
+| `CHECKBOX` (0) | A manual tick. | |
+| `NEW_TAB` (1) | The steps after it go on a new tab named `tab_name`. | |
+| `INPUT` (2) | A text field bound to a project setting (`project_setting_path`) and a variable (`target_variable`). Done while it holds text, unless `require_non_empty` is off. Each keystroke updates the setting in memory; `project.godot` is written when the field is left, on Enter, or before any step runs. An empty setting takes `default_value`. | |
+| `RUN_GDUNIT` (3) | Runs every GdUnit4 test, then reads the run's JUnit report under `res://reports`: a failure fails the step. Disabled when GdUnit4 is missing. | |
+| `RECORD_MOVIE` (4) | Plays the main scene under Movie Maker, then optionally re-encodes the film to H.264 with ffmpeg and deletes the film. The movie path is set only for that launch; `project.godot` never stores it. | `output_path`, `reencode`, `crf` (23), `preset` (`medium`), `suffix` (`_sample.mp4`) |
+| `DELETE_FOLDER` (5) | Deletes a folder and its contents, then optionally creates folders. Refuses a drive, a top-level folder, the home folder, or the project or a folder holding it. | `path`, `paths` |
+| `CREATE_FOLDERS` (6) | Creates folders. | `paths` |
+| `ARCHIVE_FOLDER` (7) | Copies a folder into another, newer files only (`xcopy /D`), so archiving twice is safe. | `source`, `destination` |
+| `CLEAR_USER_DATA` (8) | Asks, then deletes everything in `user://` (saves, settings, logs) and leaves the empty folder. Anything else that saves there, such as an installed copy of the game, loses its data too. | |
+| `OPEN_IN_EXPLORER` (9) | Opens a folder in the file manager. | `path`, `create` (make it first) |
+| `COPY_TO_CLIPBOARD` (10) | Copies text. | `text` |
+| `RESET_AND_INCREMENT` (11) | Adds one to the last number of `application/config/version`, clears the commit message, unticks every step, clears every console, and shows the first tab. | |
+| `RUN_COMMAND` (12) | Runs `executable` with `args` in `working_dir`; a non-zero exit fails the step unless `require_zero_exit` is off. | |
+| `RUN_STEPS` (13) | Runs the steps in `step_ids` in order, ticking or unticking each by its result. A step that is not yet enabled is skipped and named, so an aggregate never runs ahead of its children's gates. Button overrides (Debug/Release) pass down. | |
+| `WRITE_VDF_DESC` (14) | Writes the Steam build description, and optionally the branch it goes live on, into app build VDF files. Quotes and backslashes are escaped. | `files`, `desc`, `branch` |
+| `EXPORT_PROJECT` (15) | Exports headlessly like the editor's **Export All**: two buttons, Debug and Release, each exporting every preset to its own export path. Locked once done, until Reset. | `debug` (one button), `exports` (`[{preset, output}]`) |
+| `RUN_COMMAND_ASYNC` (16) | Removed in 0.3: runs as `RUN_COMMAND`. Kept so old configs load. | |
+| `RENDER_QUEUE` (17) | A batch of renders: see *Render queue*. | `inputs`, `jobs`, `out_dir`, `work_dir`, `keep_work` (set by the row; the last three override the step's fields) |
+
+New actions are only ever appended: configs store the number.
+
+### Running, Stop and Reset
+
+- While a step runs, every other button is disabled except **instant** ones
+  (`OPEN_IN_EXPLORER`, `COPY_TO_CLIPBOARD`), which run at once beside it. Copying
+  the commit command during an hour-long export is fine.
+- The running step's button reads **Stop**. Stop ends its process and everything
+  that process started (`taskkill /T`), or the play session it started, and a
+  batch or a chain of steps stops before its next item.
+- **Reset** (`RESET_AND_INCREMENT`) never ticks itself; give it a `display_name`
+  such as "Reset this panel and increment the build".
+
+### The Demo toggle
+
+The header's **Demo** switch sets `application/steamroller/demo_mode`. Exports
+know their edition from a `demo` or `full` feature tag, so the switch is for
+editor runs: a game that wants to preview its demo from the editor reads the
+setting when `OS.has_feature("editor")` is true. The plugin itself does not change
+how the game runs.
+
+## Variables
+
+Steps write `${NAME}`. The config's own `variables` may use other variables
+(`"BUILDS_DIR": "${PROJECT_DIR}../builds"`). The built-ins are added on top:
+
+| Variable | Value |
+|---|---|
+| `${VERSION}` | `application/config/version` |
+| `${APP_NAME}` | `application/config/name` |
+| `${COMMIT_MESSAGE}` | `application/config/commit_message` |
+| `${COMMIT_MESSAGE_SLUG}` | the message as a folder name: lower case, `[a-z0-9_-]`, spaces as `_` |
+| `${STEAM_BRANCH}` | `application/steamroller/steam_branch` |
+| `${DEMO_MODE}` | `true` or `false` |
+| `${USER_DIR}` | this project's `user://`, absolute |
+| `${USER_DIR_DEMO}` | the demo export's user folder (`config/custom_user_dir_name.demo`), or empty |
+| `${PROJECT_DIR}` | `res://`, absolute, with a trailing slash |
+| `${PLATFORM}` | `OS.get_name()` |
+| `${GODOT_EXE}` | the running editor's executable |
+
+An INPUT step's `target_variable` holds its field's current text. An undefined
+variable is warned about once and left as written, so a typo shows in the command
+it broke. Arguments are quoted for cmd.exe as needed; an empty one is passed as
+`""`.
+
+## Render queue
+
+A `RENDER_QUEUE` step turns files into videos (or anything else) in a batch. Its
+row offers:
+
+- **Source**: each folder under `render_scan_dirs` that holds inputs, newest first;
+- the **inputs** found in it: every file matching `render_pattern`, and with
+  `render_include_folders` every folder that holds some, as one input; select any
+  number;
+- one **checkbox per job** (`render_jobs`), ticked as the job's `checked` says;
+- **Render selected**, which runs every selected input through every ticked job,
+  one after the other; a job that fails is named at the end and the batch goes on.
+
+A job (`SteamRollerRenderJob`) is an `id`, a `label`, a `description` (the
+tooltip), `settings` and `passes`. A pass (`SteamRollerRenderPass`) is a command,
+run like `RUN_COMMAND`, with `ok_exit_codes` and an `echo_pattern` (a regular
+expression; only matching lines reach the console, every line is in the log).
+Passes may use, besides every variable above:
+
+| Variable | Value |
+|---|---|
+| `${INPUT}` | the input, absolute |
+| `${INPUT_NAME}` | a file as `<parent folder>_<name without extension>`, a folder as its name |
+| `${INPUT_DIR}` | the input's folder |
+| `${JOB_ID}` | the job's id |
+| `${OUT_DIR}` | `render_out_dir`, created if missing |
+| `${WORK_DIR}` | a scratch folder for this input and job under `render_work_dir` (default: the OS cache folder), deleted when the job succeeds, kept when it fails |
+
+**Project settings for one job.** The step's `render_settings` and the job's
+`settings` (`{"section/key": value}`) are written to the project's `override.cfg`
+while the job runs, so a game a pass launches with `--path` reads them and
+`project.godot` never changes. The file carries a `[steamroller]` mark; one
+without it is the project's own, and a batch refuses to start while it exists.
+One left behind by an editor that closed mid-job is removed when the plugin
+loads. Gitignore `override.cfg` in the project. Do not export or play from the
+editor while a batch runs: they would read the job's settings too.
+
+Sunset Painter's config is a full example: four film jobs over stroke tapes, each
+a Movie Maker pass of the game (`--write-movie`, `--fixed-fps`) and an ffmpeg
+pass, with `editor/movie_writer/ogv/encoding_speed` 1 for the job only.
+
+## Copy saves: `deck/pull_saves.sh`
+
+```
+pull_saves.sh --dest DIR [--local DIR]... [--deck auto|DIR]... [--require-deck] [--dry-run] -- SUBDIR...
+```
+
+Merges each `SUBDIR` (say `saves`, or `sunsets photos`) of every source folder
+into `DEST/SUBDIR`: a file is copied when the destination lacks it or the
+source's copy is newer; a newer file already there is kept; sources are never
+changed. `--deck auto` finds the Deck's user folders as `deploy.sh` does
+(`DECK_USER_DIR`, else `~/.local/share/<custom_user_dir_name>`), plus the demo
+export's folder when `project.godot` names one. An unreachable Deck is a warning
+and the local folders are still copied, unless `--require-deck`. The template
+wires it as **Copy saves** beside **Record gameplay**, into
+`${BUILDS_DIR}/latest`, where the archive step keeps them with the build; edit
+the folder names after `--` for your game.
 
 ## SteamPipe (steamcmd)
 
-Steam uploads use Valve's SteamPipe ContentBuilder, which can't be bundled
-due to Steamworks SDK licensing.
+Steam uploads use Valve's SteamPipe ContentBuilder, which cannot be bundled.
 
 1. Download the Steamworks SDK from <https://partner.steamgames.com/>.
 
    ![Download the Steamworks SDK](docs/download_sdk.png)
 
-2. Extract it adjacent to your project. The default config expects
-   `${PROJECT_DIR}../steamworks_sdk/`; override via the `STEAM_CMD_PATH`
-   and `VDF_DIR` variables.
-3. Place your app's `.vdf` at
+2. Extract it beside your project. The template expects
+   `${PROJECT_DIR}../steamworks_sdk/`; change `STEAM_CMD_PATH` and `VDF_DIR` to
+   put it elsewhere.
+3. Put your app's build script at
    `steamworks_sdk/tools/ContentBuilder/scripts/app_<APP_ID>.vdf`.
-4. Run `steamcmd.exe` once manually to cache login credentials.
+4. Run `steamcmd.exe` once by hand to cache the login.
 
-The `WRITE_VDF_DESC` step automatically updates the `desc` field before each push,
-so the Steam build history is labelled with the correct version and message. Pass
-`params.branch` to also set the `setlive` branch (the release branch builds go live on).
-Add it before your push steps with `params = {"files": ["${VDF_DIR}/app_${STEAM_APP_ID_FULL}.vdf", ...], "desc": "(${VERSION}) ${COMMIT_MESSAGE}", "branch": "${STEAM_BRANCH}"}`.
+`WRITE_VDF_DESC` writes the version and message into each VDF's `desc` before a
+push, so Steam's build history is labelled, and with `params.branch` the branch
+the build goes live on (`${STEAM_BRANCH}`, a persisted INPUT).
 
-The branch comes from a persisted text input bound to the
-`application/steamroller/steam_branch` setting and exposed as the `${STEAM_BRANCH}`
-variable, so the default (e.g. `beta`) carries across builds and can be edited per release.
+### First push to Steam
 
-### Automated export
-
-The `EXPORT_PROJECT` step mirrors the editor's **Export All** button. It renders
-two buttons — **Export All Debug** and **Export All Release** — and each
-relaunches the current Godot editor binary with `--headless` plus
-`--export-debug` or `--export-release`, once per preset, in sequence. This
-requires export templates to be installed.
-
-By default it needs no configuration at all: every preset in
-`export_presets.cfg` is exported to its own `export_path`, in file order.
-Missing output folders are created. Note that Debug and Release share those
-paths, so the last export you ran is the one on disk.
-
-To pin a single mode (one button instead of two), or to export a hand-picked
-list to paths of your own:
-
-```gdscript
-params = {
-  "debug": false,                 # optional: one button, always Release
-  "exports": [                    # optional: overrides export_presets.cfg
-    {"preset": "Windows Desktop", "output": "${BUILDS_DIR}/latest/game_depot/game.exe"},
-    {"preset": "Linux/X11",       "output": "${BUILDS_DIR}/latest/game_depot/game.x86_64"},
-  ],
-}
-```
-
-Once an export completes, both buttons stay disabled until **Reset and
-increment version** restarts the checklist.
-
-The default config ships with `STEAM_APP_ID_DEMO` and `STEAM_APP_ID_FULL`
-both set to `480` (Valve's public SpaceWar test app) so you can dry-run
-without a real product on Steam.
-
-## First push to Steam
-
-After your first upload, SteamPipe may report a failure because the `beta`
-branch does not exist yet. Set one build to the default branch, then create
-the `beta` branch from the Steamworks dashboard:
+The first upload may report a failure because the `beta` branch does not exist
+yet. Set one build live on the default branch, then create `beta` in the
+Steamworks dashboard:
 
 ![Creating a Steam branch](docs/creating_branches.png)
 
-Before players can install the game, add launch options for Windows and Linux
-under **Installation → General Installation** (names should match your depot
-output, e.g. `builds/latest/game_depot`):
+Before players can install, add Windows and Linux launch options under
+**Installation → General Installation** matching your depot output:
 
 ![Setting launch options](docs/launch_options.png)
 
 ## Itch (butler)
 
-`butler.exe` ships bundled at `addons/steamroller/butler-windows-amd64/`.
-Run `butler login` once from a terminal, then uploads work.
+butler is not redistributed here. Download it from
+<https://itch.io/docs/butler/>, put `butler.exe`, `7z.dll` and `c7zip.dll` in
+`addons/steamroller/butler-windows-amd64/` (gitignored), and run `butler login`
+once.
 
-## Steam Deck (devkit)
+## Steam Deck (devkit): `deck/deploy.sh`
 
 `deck/deploy.sh` takes the project from an edit to a running build on a Steam
 Deck, in Game Mode, through the SteamOS devkit's device-side tools
@@ -156,145 +244,74 @@ cp addons/steamroller/templates/deck.env.example data/deck.env   # fill in DECK_
 bash addons/steamroller/deck/deploy.sh --doctor
 ```
 
-`data/deck.env` holds the Deck's address and the Godot binary; gitignore it in
-your project. Everything else is derived: the devkit title from
-`application/config/name`, the Deck-side `user://` folder from the same name,
-the export folder from the preset's `export_path` (default preset
-`Deck_Testing`; keep it out of the depot folders), and the wipe guard from
-`BUILDS_DIR` (default `<project>/../builds`). Each can be overridden in
-`deck.env`; the example lists every key. `--env FILE` reads a different file.
+`data/deck.env` holds the Deck's address and the Godot binary; gitignore it.
+Everything else is derived from `project.godot`: the devkit title from
+`application/config/name`, the Deck-side `user://` from the same name (or the
+custom user folder), the export folder from the preset's `export_path` (default
+preset `Deck_Testing`; keep it out of the depot folders), and the wipe guard from
+`BUILDS_DIR` (default `<project>/../builds`). `--env FILE` reads another file.
 
-Flags: `--release`, `--no-export`, `--no-launch`, `--launch` (re-register and
-run what is on the Deck), `--stop`, `--debugger[=HOST]` (appends
+Flags: `--release`, `--no-export`, `--no-launch`, `--launch` (re-register and run
+what is on the Deck), `--stop`, `--debugger[=HOST]` (appends
 `--remote-debug tcp://HOST:6007`; the editor needs *Debug > Keep Debug Server
-Open*), `--clean-cache` (clear the shader caches under `user://` on the Deck first;
-saves, logs and prefs are kept), `--tail` (follow the
-Deck-side `user://logs/godot.log` until the game exits), `--run ARGS...`, `--doctor`, `--dry-run`. Every failure prints an `ERROR` line
-and exits 1.
+Open*), `--clean-cache` (clears the shader caches under the Deck's `user://`;
+saves, logs and prefs are kept), `--tail` (follow the Deck's
+`user://logs/godot.log` until the game exits), `--run ARGS...`, `--doctor`,
+`--dry-run`. Every failure prints an `ERROR` line and exits 1.
 
 **The registered argv is the Deck's play button, so `--run` and `--debugger` args
-are transient.** The shortcut is what Steam launches when someone picks the title
-in the library, and it persists until something re-registers it. Steam reads the
-argv when it spawns the process, so once the game's pid is up the shortcut is
-restored to the bare binary — the run gets its args, and the play button goes
-back to being the game. Without this a `--run --bench` gate leaves the benchmark
-wired to the play button, and the next hand-launch runs the suite and quits,
-which reads as "the build is broken". `--no-launch` has nothing to restore it
-with, so it warns instead and names the remedy (`deploy.sh --launch`).
+are transient.** Once the game's pid is up the shortcut is restored to the bare
+binary, so a `--run --bench` gate never leaves the benchmark wired to the play
+button. `--no-launch` cannot restore it and warns instead (`deploy.sh --launch`).
 
-The template config wires it up as the optional **Build + run on Deck** button
-(`RUN_COMMAND` through `${BASH_EXE}` with `${DECK_SCRIPT} --clean-cache`).
-`BASH_EXE` defaults to Git for Windows' `bash.exe`; the script also runs from a
-Git Bash terminal directly. Note that the dock only shows the script's output
-once it exits (see *Logs* below); the run itself takes about twenty seconds
-and returns as soon as the Deck reports the game's pid.
+The template wires it as **Build + run on Deck** (`RUN_COMMAND` through
+`${BASH_EXE}` with `${DECK_SCRIPT} --clean-cache`).
 
 ### Benchmark: `deck/bench.sh`
 
-`bench.sh <windows exe> [linux preset] [results file]` runs an exported build with `--bench`
-three ways and prints one result line per run: Windows Vulkan, then Windows
-D3D12 (`--rendering-driver d3d12`) — a smoke test, one after the other — and,
-in parallel, the Steam Deck through `deploy.sh --no-export --tail --run --bench`
-with `EXPORT_PRESET` set to the Linux preset (default `Linux_Final`), so the
-depot files are what gets pushed. The Deck number is the one to read.
+`bench.sh <windows exe> [linux preset] [results file]` runs an exported build with
+`--bench` three ways and prints one result line each: Windows Vulkan, then Windows
+D3D12 (a smoke test), and in parallel the Steam Deck through
+`deploy.sh --no-export --tail --run --bench` (the number to read). The game's side
+of the contract: started with `--bench` it prints one line beginning `BENCHMARK`
+and quits (`--benchmark` is an engine flag). Each run is wrapped in `timeout`
+(`BENCH_TIMEOUT`, default 300 s); a run with no `BENCHMARK` line is `FAILED` and the
+script exits 1. Every run appends a dated block to the results file (default
+`<exe dir>/../benchmark.txt`).
 
-The game's side of the contract: when started with `--bench` it prints one line
-beginning `BENCHMARK` (any fields after that) and quits. `--benchmark` is an
-engine flag in Godot 4, which is why the short name. Windows output is read
-from stdout, the Deck's from the followed log. Each run is wrapped in
-`timeout` (`BENCH_TIMEOUT`, default 300 s). A run with no `BENCHMARK` line is
-reported as `FAILED` and the script exits 1 after printing every result it did
-get. Every run also appends a dated block of the same lines to the results
-file (default `<exe dir>/../benchmark.txt`, i.e. `builds/latest/`, so the
-archive step keeps it and the depot does not ship it). Wire it as a `RUN_COMMAND` step: `${BASH_EXE}` with args
-`${PROJECT_DIR}addons/steamroller/deck/bench.sh`,
-`${BUILDS_DIR}/latest/game_depot/<Game>.exe`, `Linux_Final`,
-`${BUILDS_DIR}/latest/benchmark.txt`.
+## Logs
 
-## Variables
+Every external process runs through one helper: `create_process` with stdout and
+stderr redirected to a log file, polled from a coroutine, so the editor stays
+usable for the whole run. Logs live in `<OS cache folder>/steamroller_logs/<project>/`
+(outside `user://`, which `CLEAR_USER_DATA` deletes), named
+`<timestamp>_<seq>_<step>.log`; the newest `logs_kept` (30) are kept. A failed
+step whose output was quiet or filtered shows its log's path and last lines.
 
-User-defined variables live in `config.variables`. Built-ins always available:
+The config's **Advanced** group holds the poll interval, the heartbeat, how many
+lines a failure echoes, how many logs are kept, the buttons' width and the render
+list's height.
 
-- `${VERSION}` — `application/config/version`
-- `${APP_NAME}` — `application/config/name`
-- `${COMMIT_MESSAGE}` — `application/config/commit_message` (raw, with spaces — use in git commit messages and VDF descriptions)
-- `${COMMIT_MESSAGE_SLUG}` — same value with spaces replaced by underscores (use in folder/archive names)
-- `${STEAM_BRANCH}` — `application/steamroller/steam_branch` (the `setlive` branch for VDF pushes)
-- `${DEMO_MODE}` — `"true"` or `"false"`
-- `${USER_DIR}` — globalized `user://`
-- `${PROJECT_DIR}` — globalized `res://` (trailing slash included)
-- `${PLATFORM}` — `OS.get_name()`
+## Known limits
 
-Undefined variables emit a warning and remain as literal `${TOKEN}` in the
-rendered command, so misconfigurations show up immediately in the console.
+- **Windows only.** The shell is cmd.exe; folders are deleted and archived with
+  `rmdir` and `xcopy`; Stop uses `taskkill`. The Deck scripts need Git for Windows'
+  bash.
+- **Output arrives when a process exits.** While cmd.exe holds the redirect open,
+  Godot cannot open the log (it asks for read access without sharing writes), so a
+  heartbeat line (`… still running (2m05s)`) marks progress meanwhile: one line in the
+  console that updates in place, kept out of the Output panel. Live output would need
+  `OS.execute_with_pipe` and a reader.
+- `RUN_GDUNIT` reads GdUnit's report files; with none, it passes and says so.
+- The commit message lives in Godot's own `application/config/` section
+  (`commit_message`), so outside tools find it beside the version.
 
-## Version increment
+## Migrating a 0.2 config
 
-`RESET_AND_INCREMENT` finds the last numeric segment of
-`application/config/version` and increments it by one. Works for any segment
-count:
-
-- `1.2.3.4` → `1.2.3.5`
-- `0.1` → `0.2`
-- `2.345` → `2.346`
-
-Use whatever your platform needs (Windows resource versions want 4 segments,
-others can use fewer).
-
-## Push builds section
-
-The template config demonstrates separate **demo** and **full** exports
-(`Windows_Demo` / `Linux_Demo` → `builds/latest/demo_depot`, `Windows_Final` /
-`Linux_Final` → `game_depot`, `Web` → `web`). In the Release tab, a
-`CHECKBOX` header step (`push_builds`) introduces the section; individual
-push endpoints and aggregate buttons are marked `is_optional = true` so they
-share one button row:
-
-- **Push all** — runs every endpoint step in order (`RUN_STEPS` + `step_ids`)
-- **Push all demo** — demo Steam + demo Itch
-- **Push all release** — game Steam + web Itch + game Itch
-- Per-endpoint buttons — each `RUN_COMMAND` step with its own `id`
-
-Define endpoint steps once, then reference their IDs from aggregate steps:
-
-```gdscript
-# RUN_STEPS aggregate (is_optional = true, button_label = "Push all")
-step_ids = ["push_demo_steam", "push_game_steam", "push_demo_itch", ...]
-```
-
-`push_all_demo` and `push_all_release` are normal checklist rows (not
-optional): they gate on `build_complete` and tick their own checkbox when
-their button finishes. The optional **Push all** shortcut runs every ID in
-its `step_ids` list and marks each child step complete on success — so a
-minimal config with only two non-optional `RUN_COMMAND` endpoints plus
-**Push all** still runs and checks off both from one click.
-
-Optional per-endpoint push buttons are always enabled. Their output is routed
-to the console of the row they are attached to, as well as the Godot Output
-panel.
-
-## Logs and the non-blocking shell
-
-Every external process runs through one helper: `create_process` plus a polled
-`await`, with stdout and stderr redirected to a log file. The editor stays
-interactive for the whole run — a `steamcmd` or `butler` upload no longer
-freezes it — and while any step is running every action button is disabled, so
-a second export or upload cannot be launched on top of the first.
-
-While a command runs the console shows a heartbeat (`… still running (30s)`);
-the captured output is emitted when the process exits. It generally cannot be
-shown sooner: on Windows, `FileAccess.open()` fails with `ERR_FILE_CANT_OPEN`
-for as long as `cmd.exe` holds the redirect target open, even though other
-processes can read that file. The tail is written incrementally anyway, both
-because it picks output up early wherever the file *is* readable and because
-`RUN_COMMAND_ASYNC` points it at a `tail_file` written by a third-party tool.
-Genuinely live output would need `OS.execute_with_pipe` plus a reader thread,
-and even that only helps for tools that do not buffer stdout when it is not a
-console (`ping` and `steamcmd` buffer; Go tools like `butler` do not).
-
-Log files are written to `<OS cache dir>/steamroller_logs/<project name>/`,
-named `<timestamp>_<seq>_<step>.log` — timestamp first, so a plain name sort is
-chronological. They are kept on success as well as failure — a failed
-`steamcmd` push is far easier to diagnose from the full file than from the
-console tail — and the newest 30 are retained. The directory is deliberately
-outside `user://`, which the `CLEAR_USER_DATA` step deletes.
+0.2 marked a step that joins the row above as `is_optional = true` (with
+`new_button_row` for a second line). That still loads and works, and the dock
+prints a note. To migrate: replace each `is_optional = true` with
+`attach_to = "<id of the row's step>"`, give every attached step an `id`, and give
+a step used twice (say an "Open build folder" on two rows) one sub-resource per
+use. An attached step now honours its own `depends_on`. `RUN_COMMAND_ASYNC` runs
+as `RUN_COMMAND`; `tail_file` is gone.
