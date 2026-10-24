@@ -9,7 +9,8 @@ class_name SteamRollerStepRow extends VBoxContainer
 ##                              steps attached to it (attach())
 ##   console                    hidden until a line arrives
 ##
-## While a button's step runs, that button reads Stop. A step that asks a
+## While a button's step runs, that button reads Stop. A ticked step's buttons
+## carry a check icon, whether it ran or was ticked by hand. A step that asks a
 ## question first (SteamRollerStep.confirmation) runs only on OK.
 
 const ConsoleScene := preload("res://addons/steamroller/ui/console_output.tscn")
@@ -260,9 +261,9 @@ func _refresh() -> void:
 			e.button.tooltip_text = "Done for this version: Reset unlocks it."
 		else:
 			e.button.tooltip_text = ""
-		# An attached step's tick shows on its button (the row's checkbox is the
-		# row's own step).
-		var done := s != step and s.marks_completion() and runner.is_completed(s.id)
+		# A ticked step shows its tick on its buttons, the row's own step as well as
+		# attached ones. The row's checkbox is the same tick, set by hand to skip a step.
+		var done := s.marks_completion() and runner.is_completed(s.id)
 		e.button.icon = get_theme_icon("StatusSuccess", "EditorIcons") if done else null
 	_refresh_description()
 

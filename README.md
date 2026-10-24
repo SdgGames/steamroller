@@ -49,7 +49,7 @@ A step with no `display_name` has no header line.
 | `depends_on` | Steps that must **all** be ticked before this step's buttons are enabled. |
 | `depends_on_any` | Steps of which **at least one** must be ticked ("record gameplay *or* copy the saves"). Applies together with `depends_on`. |
 | `button_label` | Button text; empty = the action's default. |
-| `attach_to` | The id of the step whose row shows this step's buttons. The attached step has no row of its own but keeps its own id, completion, gating and output; its button shows a check icon once it has run successfully. |
+| `attach_to` | The id of the step whose row shows this step's buttons. The attached step has no row of its own but keeps its own id, completion, gating and output. |
 | `new_button_row` | Attached steps only: start a new line of buttons in the host row. |
 | `confirm_text` | A question asked first; the step runs only on OK. `CLEAR_USER_DATA` always asks. |
 | `params` | Action-specific parameters (table below). Strings, also inside arrays and dictionaries, have their variables resolved. |
@@ -89,6 +89,9 @@ New actions are only ever appended: configs store the number.
 - The running step's button reads **Stop**. Stop ends its process and everything
   that process started (`taskkill /T`), or the play session it started, and a
   batch or a chain of steps stops before its next item.
+- A ticked step shows a check icon on its buttons, the row's own step and
+  attached ones alike, whether it ran successfully or was ticked by hand. The
+  row's checkbox sets the same tick by hand, to skip a step.
 - **Reset** (`RESET_AND_INCREMENT`) never ticks itself; give it a `display_name`
   such as "Reset this panel and increment the build".
 
