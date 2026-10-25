@@ -40,7 +40,7 @@ enum Action {
 	## Copy a folder into another, newer files only (xcopy /D).
 	## params: { "source": String, "destination": String }
 	ARCHIVE_FOLDER = 7,
-	## Delete everything in the project's user:// folder, after a confirmation.
+	## Delete everything in the project's user:// folder (confirm_text asks first).
 	CLEAR_USER_DATA = 8,
 	## Open a folder in the file manager. params: { "path": String,
 	## "create": bool = false (make the folder first when it is missing) }
@@ -93,6 +93,10 @@ enum Action {
 ## enabled (an "either one" gate). Applies together with depends_on.
 @export var depends_on_any: PackedStringArray = []
 
+## Steps ticked along with this one: it stands in for them (Copy saves for
+## Record gameplay). Only a tick carries; unticking this step leaves them.
+@export var also_ticks: PackedStringArray = []
+
 ## Button text. Empty = the action's default ("Run unit tests", ...).
 @export var button_label: String = ""
 
@@ -104,7 +108,7 @@ enum Action {
 @export var new_button_row: bool = false
 
 ## A question asked before the step runs (OK runs it, Cancel does not).
-## Variables apply. Empty = no question; CLEAR_USER_DATA always asks.
+## Variables apply. Empty = no question.
 @export_multiline var confirm_text: String = ""
 
 ## Action-specific parameters (see Action). Strings, also inside arrays and
@@ -149,8 +153,22 @@ enum Action {
 @export var render_pattern: String = ""
 ## RENDER_QUEUE: also list each folder that holds inputs, as one input.
 @export var render_include_folders: bool = false
-## RENDER_QUEUE: where the results go: the jobs' ${OUT_DIR}. Variables apply.
+## RENDER_QUEUE: where the results go: the jobs' ${OUT_DIR}. Variables apply,
+## the job's own too (all but ${OUT_DIR}): "${INPUT_HOME}" puts each result
+## beside its input.
 @export var render_out_dir: String = ""
+## RENDER_QUEUE: the game inside a build folder ("game_depot/Game.exe"). Set,
+## each input is run by an exported build instead of the editor: the build
+## named by the input's version (render_version_pattern), else the nearest
+## folder above the input that holds it. Passes get ${BUILD_EXE}: a copy of
+## it in the job's scratch folder. Empty = passes run whatever they name
+## (${GODOT_EXE}).
+@export var render_build_exe: String = ""
+## RENDER_QUEUE: a regular expression whose first group is the version that
+## made an input, read from its first line (a folder: its last input's), e.g.
+## "\"game\":\"([^\"]+)\"". The build folder named that version, or starting
+## with it and "_", runs it. Empty = the build the input sits in.
+@export var render_version_pattern: String = ""
 ## RENDER_QUEUE: where each job's scratch folder (${WORK_DIR}) is made.
 ## Empty = a folder in the OS cache directory. Variables apply.
 @export var render_work_dir: String = ""
@@ -238,13 +256,7 @@ func marks_completion() -> bool:
 
 ## The question asked before running, unresolved ("" = none).
 func confirmation() -> String:
-	if not confirm_text.is_empty():
-		return confirm_text
-	if action == Action.CLEAR_USER_DATA:
-		return ("Delete everything in ${USER_DIR}?\n\nThat is this project's user data "
-			+ "folder: saves, settings and logs. Anything else that saves there, such "
-			+ "as an installed copy of the game, loses its data too.")
-	return ""
+	return confirm_text
 
 
 ## INPUT: whether `text` makes the step complete.

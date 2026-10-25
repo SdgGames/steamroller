@@ -99,10 +99,10 @@ script = ExtResource("2_step")
 id = "movie"
 action = 4
 display_name = "Record gameplay, or play the build and copy the saves."
-description = "[b]Record gameplay[/b] plays the main scene in Movie Maker mode into [color=cyan]${BUILDS_DIR}/latest/gameplay.ogv[/color], then re-encodes it to MP4 with ffmpeg. [b]Copy saves[/b] instead merges the game's save folders (this machine's, and a Steam Deck's when one answers) into [color=cyan]${BUILDS_DIR}/latest[/color]; edit its folder names after [code]--[/code]. Either one unlocks the archive."
+description = "[b]Record gameplay[/b] plays the main scene in Movie Maker mode into [color=cyan]${BUILDS_DIR}/latest/gameplay.avi[/color], then re-encodes it to MP4 with ffmpeg. [b]Copy saves[/b] instead copies the editor runs' saves, and the Deck test build's (named [code]Deck_…[/code]) when a Steam Deck answers, into [color=cyan]${BUILDS_DIR}/latest[/color]; edit its folder names after [code]--[/code]. An exported game's own folders are its players' and are never read. Copy saves ticks this row too, so either one unlocks the archive."
 depends_on = PackedStringArray("export_reminder")
 params = {
-"output_path": "${BUILDS_DIR}/latest/gameplay.ogv",
+"output_path": "${BUILDS_DIR}/latest/gameplay.avi",
 "reencode": true
 }
 
@@ -112,8 +112,9 @@ id = "copy_saves"
 action = 12
 button_label = "Copy saves"
 attach_to = "movie"
+also_ticks = PackedStringArray("movie")
 executable = "${BASH_EXE}"
-args = PackedStringArray("${PULL_SAVES_SCRIPT}", "--dest", "${BUILDS_DIR}/latest", "--local", "${USER_DIR}", "--local", "${USER_DIR_FULL}", "--local", "${USER_DIR_DEMO}", "--deck", "auto", "--", "saves")
+args = PackedStringArray("${PULL_SAVES_SCRIPT}", "--dest", "${BUILDS_DIR}/latest", "--local", "${USER_DIR}", "--deck", "auto", "--deck-prefix", "Deck_", "--", "saves")
 working_dir = "${PROJECT_DIR}"
 
 [sub_resource type="Resource" id="s_archive"]

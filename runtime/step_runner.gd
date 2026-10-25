@@ -145,10 +145,18 @@ func is_completed(step_id: String) -> bool:
 
 
 func set_completed(step_id: String, value: bool) -> void:
-	if step_id.is_empty() or (_completed.has(step_id) and _completed[step_id] == value):
+	if step_id.is_empty():
 		return
-	_completed[step_id] = value
-	step_state_changed.emit(step_id)
+	if not _completed.has(step_id) or _completed[step_id] != value:
+		_completed[step_id] = value
+		step_state_changed.emit(step_id)
+	# A tick carries to the steps this one stands in for, a re-run's too; a step
+	# already ticked ends the chain, so a loop of also_ticks stops.
+	var s := find_step(step_id)
+	if value and s != null:
+		for other in s.also_ticks:
+			if not is_completed(other):
+				set_completed(other, true)
 
 
 func is_enabled(s: SteamRollerStep) -> bool:

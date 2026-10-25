@@ -24,7 +24,8 @@
 #   EXPORT_PRESET=Deck_Testing
 #   BUILDS_DIR=                         # export dirs may only be wiped under here;
 #                                       # default <project>/../builds (SteamRoller's ${BUILDS_DIR})
-#   DECK_USER_DIR=                      # user:// on the Deck; default derived from config/name
+#   DECK_USER_DIR=                      # user:// on the Deck; default: the preset's own,
+#                                       # from project.godot (see user_dir_of)
 #   DEBUG_HOST=                         # optional: this PC's IPv4 as seen by the Deck
 #
 # Transfer is scp guarded by a remote sha256sum comparison (no rsync on this
@@ -91,11 +92,12 @@ DEBUG_PORT=6007
 
 # --- Modes -----------------------------------------------------------------
 
-MODE="deploy"            # deploy | stop | launch | doctor
+MODE="deploy"            # deploy | stop | launch | doctor | user-dir
 BUILD_MODE="debug"
 DO_EXPORT=1
 DO_LAUNCH=1
 DO_CLEAN_CACHE=0
+DO_CLEAR_USER_DIR=0
 DO_TAIL=0
 USE_DEBUGGER=0
 DEBUGGER_HOST_OVERRIDE=""
@@ -149,6 +151,10 @@ Usage: deploy.sh [options] [--run ARGS...]
                       Debug > Keep Debug Server Open); HOST autodetected
   --clean-cache       clear the shader caches under user:// on the Deck first (cold
                       shader cache); saves, logs and prefs are kept
+  --clear-user-dir    delete the build's whole user:// on the Deck first (saves,
+                      prefs, logs, caches: a fresh first run); refused when another
+                      preset's export saves in the same folder
+  --print-user-dir    print the build's user:// on the Deck ($HOME literal) and exit
   --tail              after launch, follow user://logs/godot.log until the game exits
   --run ARGS...       extra args passed to the game binary
   --doctor            preflight checks (add --debugger to probe port 6007)
@@ -167,6 +173,8 @@ while [ $# -gt 0 ]; do
 		--debugger)     USE_DEBUGGER=1; shift ;;
 		--debugger=*)   USE_DEBUGGER=1; DEBUGGER_HOST_OVERRIDE="${1#*=}"; shift ;;
 		--clean-cache)  DO_CLEAN_CACHE=1; shift ;;
+		--clear-user-dir) DO_CLEAR_USER_DIR=1; shift ;;
+		--print-user-dir) MODE="user-dir"; shift ;;
 		--tail)         DO_TAIL=1; shift ;;
 		--doctor)       MODE="doctor"; shift ;;
 		--dry-run)      DRY_RUN=1; shift ;;
@@ -195,27 +203,6 @@ unset _v
 [ -n "$DECK_TITLE" ] || die "DECK_TITLE is empty and project.godot has no config/name to derive it from"
 [[ "$DECK_TITLE" =~ ^[A-Za-z_][A-Za-z0-9_.]+$ ]] \
 	|| die "DECK_TITLE '$DECK_TITLE' is invalid: letters, digits, _ and . only, no hyphens"
-
-# user:// on the Deck. Godot names it after config/name unless the project opts
-# into a custom user dir name.
-if [ -n "$DECK_USER_DIR" ]; then
-	USER_DIR="$DECK_USER_DIR"
-else
-	_udir="$APP_NAME"
-	_base='$HOME/.local/share/godot/app_userdata/'
-	if [ "$(project_setting config/use_custom_user_dir)" = "true" ]; then
-		_custom="$(project_setting config/custom_user_dir_name)"
-		# A custom user dir is not under godot/app_userdata: on Linux Godot puts it
-		# straight in the data home, ~/.local/share/<custom_user_dir_name>.
-		if [ -n "$_custom" ]; then
-			_udir="$_custom"
-			_base='$HOME/.local/share/'
-		fi
-	fi
-	[ -n "$_udir" ] || die "cannot derive the Deck-side user:// folder: set DECK_USER_DIR in $ENV_FILE"
-	USER_DIR="$_base$_udir"
-	unset _udir _custom _base
-fi
 
 # -4: mDNS can hand ssh an IPv6 link-local address, which breaks $SSH_CLIENT
 # for --debugger and can flip host keys between runs.
@@ -276,6 +263,44 @@ export_basename() { basename "$(preset_field "$EXPORT_PRESET" "export_path")"; }
 # Matches only the game binary itself (command line starts with its path), so
 # a pid reported to the user is the game, not Steam's reaper.
 bin_pattern() { printf '^%s/%s' "${REMOTE_DIR_ABS/devkit-game/[d]evkit-game}" "$(export_basename)"; }
+
+# Every preset's name, in file order.
+preset_names() {
+	awk '/^\[preset\.[0-9]+\]$/ { b = 1; next } /^\[/ { b = 0 }
+		b && /^name=/ { v = $0; sub(/^name="/, "", v); sub(/"$/, "", v); print v }' "$PRESETS_CFG"
+}
+
+# --- user:// on the Deck -----------------------------------------------------
+
+# The Deck-side user:// of PRESET's export, as Godot names it. With a custom user
+# dir it sits straight in the data home, ~/.local/share/<name>, where <name> is
+# custom_user_dir_name.<feature> for the first of the preset's custom features
+# that has one (a feature override: a test build saves apart from the Steam build)
+# or else custom_user_dir_name; without one, godot/app_userdata/<config/name>.
+# $HOME stays literal, for the Deck's shell to expand.
+user_dir_of() {
+	local features="" f name=""
+	[ -f "$PRESETS_CFG" ] && features="$(preset_field "$1" custom_features)"
+	if [ "$(project_setting config/use_custom_user_dir)" = "true" ]; then
+		for f in ${features//,/ }; do
+			name="$(project_setting "config/custom_user_dir_name\\.$f")"
+			if [ -n "$name" ]; then break; fi
+		done
+		[ -n "$name" ] || name="$(project_setting config/custom_user_dir_name)"
+	fi
+	if [ -n "$name" ]; then
+		printf '%s' "\$HOME/.local/share/$name"
+	elif [ -n "$APP_NAME" ]; then
+		printf '%s' "\$HOME/.local/share/godot/app_userdata/$APP_NAME"
+	fi
+}
+
+if [ -n "$DECK_USER_DIR" ]; then
+	USER_DIR="$DECK_USER_DIR"
+else
+	USER_DIR="$(user_dir_of "$EXPORT_PRESET")"
+fi
+[ -n "$USER_DIR" ] || die "cannot derive the Deck-side user:// folder: set DECK_USER_DIR in $ENV_FILE"
 
 # --- Debug host --------------------------------------------------------------
 
@@ -537,11 +562,8 @@ restore_shortcut() {
 	do_register plain
 }
 
-# Only Godot's caches go: the shader cache and the Vulkan pipeline cache. Never the
-# folder itself -- on a Deck that also has the game installed from Steam, user:// is
-# the SAME folder the Steam build saves into (one custom_user_dir_name), and a wipe
-# here took a player's sunsets with it once (Sunset Painter, 2026-10-23). Saves, logs
-# and prefs stay.
+# Only Godot's caches go: the shader cache and the Vulkan pipeline cache. Saves, logs
+# and prefs stay. (--clear-user-dir takes the whole folder, where it is the build's own.)
 CACHE_DIRS=(shader_cache vulkan)
 do_clean_cache() {
 	step "Clearing the Deck-side shader caches (cold run); saves, logs and prefs are kept"
@@ -552,6 +574,31 @@ do_clean_cache() {
 		deck "rm -rf \"$USER_DIR/$d\" && test ! -e \"$USER_DIR/$d\"" || die "could not remove $USER_DIR/$d on the Deck"
 		info "removed $USER_DIR/$d"
 	done
+}
+
+# --clear-user-dir deletes a folder on the Deck, so it must be this build's alone.
+# On a Deck that also has the game installed from Steam, a folder another preset's
+# export saves in is the Steam build's too, and a wipe of it took a player's sunsets
+# once (Sunset Painter, 2026-10-23). Checked before anything is exported or pushed.
+check_clear_user_dir() {
+	case "$USER_DIR" in
+		''|/|'$HOME'|'$HOME/'|'~'|'~/') die "--clear-user-dir: refusing to delete '$USER_DIR'" ;;
+	esac
+	[ -f "$PRESETS_CFG" ] || die "--clear-user-dir: no $PRESETS_CFG to tell which builds save in $USER_DIR"
+	local p
+	while IFS= read -r p; do
+		[ -n "$p" ] && [ "$p" != "$EXPORT_PRESET" ] || continue
+		if [ "$(user_dir_of "$p")" = "$USER_DIR" ]; then
+			die "--clear-user-dir: refusing to delete $USER_DIR on the Deck: preset '$p' saves there too (a copy installed from Steam would lose its saves). Give '$EXPORT_PRESET' a custom feature and project.godot an application/config/custom_user_dir_name.<feature> of its own."
+		fi
+	done < <(preset_names)
+}
+
+do_clear_user_dir() {
+	step "Clearing the Deck-side user:// (a fresh first run): saves, prefs, logs and caches"
+	if [ "$DRY_RUN" -eq 1 ]; then show_cmd ssh "$TARGET" "rm -rf \"$USER_DIR\""; return 0; fi
+	deck "rm -rf \"$USER_DIR\" && test ! -e \"$USER_DIR\"" || die "could not remove $USER_DIR on the Deck"
+	info "removed $USER_DIR"
 }
 
 do_launch() {
@@ -640,15 +687,19 @@ doctor() {
 main() {
 	[ "$DRY_RUN" -eq 1 ] && step "DRY RUN -- nothing below is executed"
 	case "$MODE" in
+		user-dir) printf '%s\n' "$USER_DIR"; return 0 ;;
 		doctor) doctor; return 0 ;;
 		stop)   do_stop; return 0 ;;
 		launch)
+			[ "$DO_CLEAR_USER_DIR" -eq 1 ] && check_clear_user_dir
 			require_title_on_deck
 			do_stop 1
 			do_register
 			[ "$DO_CLEAN_CACHE" -eq 1 ] && do_clean_cache
+			[ "$DO_CLEAR_USER_DIR" -eq 1 ] && do_clear_user_dir
 			do_launch; return 0 ;;
 	esac
+	[ "$DO_CLEAR_USER_DIR" -eq 1 ] && check_clear_user_dir
 
 	[ -n "$GODOT_BIN" ] && [ -x "$GODOT_BIN" ] || [ "$DO_EXPORT" -eq 0 ] || die "GODOT_BIN not set/executable (see $ENV_FILE)"
 
@@ -658,6 +709,7 @@ main() {
 	do_sync
 	do_register
 	[ "$DO_CLEAN_CACHE" -eq 1 ] && do_clean_cache
+	[ "$DO_CLEAR_USER_DIR" -eq 1 ] && do_clear_user_dir
 	if [ "$DO_LAUNCH" -eq 0 ]; then
 		# Nothing launched, so nothing cleared the argv: say so rather than leave
 		# the play button quietly wired to this run's args.

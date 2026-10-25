@@ -48,10 +48,11 @@ A step with no `display_name` has no header line.
 | `display_name`, `description` | The header text, and BBCode under it. |
 | `depends_on` | Steps that must **all** be ticked before this step's buttons are enabled. |
 | `depends_on_any` | Steps of which **at least one** must be ticked ("record gameplay *or* copy the saves"). Applies together with `depends_on`. |
+| `also_ticks` | Steps ticked along with this one: it stands in for them (the template's Copy saves ticks Record gameplay). Only a tick carries; unticking this step leaves them. |
 | `button_label` | Button text; empty = the action's default. |
 | `attach_to` | The id of the step whose row shows this step's buttons. The attached step has no row of its own but keeps its own id, completion, gating and output. |
 | `new_button_row` | Attached steps only: start a new line of buttons in the host row. |
-| `confirm_text` | A question asked first; the step runs only on OK. `CLEAR_USER_DATA` always asks. |
+| `confirm_text` | A question asked first; the step runs only on OK. Empty = none. |
 | `params` | Action-specific parameters (table below). Strings, also inside arrays and dictionaries, have their variables resolved. |
 
 A disabled button's tooltip says what it is waiting on.
@@ -64,11 +65,11 @@ A disabled button's tooltip says what it is waiting on.
 | `NEW_TAB` (1) | The steps after it go on a new tab named `tab_name`. | |
 | `INPUT` (2) | A text field bound to a project setting (`project_setting_path`) and a variable (`target_variable`). Done while it holds text, unless `require_non_empty` is off. Each keystroke updates the setting in memory; `project.godot` is written when the field is left, on Enter, or before any step runs. An empty setting takes `default_value`. | |
 | `RUN_GDUNIT` (3) | Runs every GdUnit4 test, then reads the run's JUnit report under `res://reports`: a failure fails the step. Disabled when GdUnit4 is missing. | |
-| `RECORD_MOVIE` (4) | Plays the main scene under Movie Maker, then optionally re-encodes the film to H.264 with ffmpeg and deletes the film. The movie path is set only for that launch; `project.godot` never stores it. | `output_path`, `reencode`, `crf` (23), `preset` (`medium`), `suffix` (`_sample.mp4`) |
+| `RECORD_MOVIE` (4) | Plays the main scene under Movie Maker, then optionally re-encodes the film to H.264 with ffmpeg and deletes the film. The movie path is set only for that launch; `project.godot` never stores it. Its extension picks the writer (`.avi` in the template). | `output_path`, `reencode`, `crf` (23), `preset` (`medium`), `suffix` (`_sample.mp4`) |
 | `DELETE_FOLDER` (5) | Deletes a folder and its contents, then optionally creates folders. Refuses a drive, a top-level folder, the home folder, or the project or a folder holding it. | `path`, `paths` |
 | `CREATE_FOLDERS` (6) | Creates folders. | `paths` |
 | `ARCHIVE_FOLDER` (7) | Copies a folder into another, newer files only (`xcopy /D`), so archiving twice is safe. | `source`, `destination` |
-| `CLEAR_USER_DATA` (8) | Asks, then deletes everything in `user://` (saves, settings, logs) and leaves the empty folder. Anything else that saves there, such as an installed copy of the game, loses its data too. | |
+| `CLEAR_USER_DATA` (8) | Deletes everything in `user://` (saves, settings, logs) and leaves the empty folder, without asking (`confirm_text` adds a question). Anything else that saves there, such as an installed copy of the game, loses its data too: give editor runs a folder of their own (below). | |
 | `OPEN_IN_EXPLORER` (9) | Opens a folder in the file manager. | `path`, `create` (make it first) |
 | `COPY_TO_CLIPBOARD` (10) | Copies text. | `text` |
 | `RESET_AND_INCREMENT` (11) | Adds one to the last number of `application/config/version`, clears the commit message, unticks every step, clears every console, and shows the first tab. | |
@@ -109,8 +110,10 @@ A game run from the editor saves in `${USER_DIR}`. A project can give editor run
 folder of their own with a feature override,
 `application/config/custom_user_dir_name.editor`, so test saves stay out of the
 folder Steam Cloud syncs for the exported game. `${USER_DIR_FULL}` is then still the
-exported game's folder: the template's Copy saves reads both, and a folder named
-twice is read once.
+exported game's folder. The template's Copy saves reads only `${USER_DIR}` (and the
+Deck test build's folder): an exported game's folder holds its players' saves.
+The Deck test build can get its own folder the same way: a custom feature on its
+preset and `custom_user_dir_name.<feature>` (see `--clear-user-dir` below).
 
 ## Variables
 
@@ -161,42 +164,78 @@ Passes may use, besides every variable above:
 | `${INPUT}` | the input, absolute |
 | `${INPUT_NAME}` | a file as `<parent folder>_<name without extension>`, a folder as its name |
 | `${INPUT_DIR}` | the input's folder |
+| `${INPUT_HOME}` | a folder input itself, a file input's folder |
+| `${INPUT_STEM}` | a folder's name, a file's name without extension |
 | `${JOB_ID}` | the job's id |
-| `${OUT_DIR}` | `render_out_dir`, created if missing |
+| `${OUT_DIR}` | `render_out_dir` (which may use every variable here but itself, so `${INPUT_HOME}` puts each result beside its input), created if missing |
 | `${WORK_DIR}` | a scratch folder for this input and job under `render_work_dir` (default: the OS cache folder), deleted when the job succeeds, kept when it fails |
+| `${BUILD_EXE}` | with `render_build_exe`: the build's game, copied into `${WORK_DIR}` |
+| `${BUILD_DIR}` · `${BUILD_VERSION}` | with `render_build_exe`: the build's folder, and the version read from the input |
+
+**An exported build per input.** With `render_build_exe` set (the game inside a
+build folder, `game_depot/Game.exe`), each input runs on an exported build instead
+of the editor, so a recording made by an old version plays on that version.
+`render_version_pattern` is a regular expression whose first group is the version,
+read from the input's first line (a folder input: its last input's, in natural
+order); the build is the scan root's folder named that version, or starting with
+it and `_` (the archive step's `${VERSION}_${COMMIT_MESSAGE_SLUG}`), the newest if
+several. Without a version, or with one never archived, it is the nearest folder
+above the input that holds the game (`latest`). The game is copied into
+`${WORK_DIR}` with its `.pck` and this platform's libraries, and the job's
+`override.cfg` beside it, where an export reads it: a build folder is never
+written, and an export template has no `--main-pack` to load a pack from elsewhere.
+Passes run `${BUILD_EXE}` without `--path`.
 
 **Project settings for one job.** The step's `render_settings` and the job's
-`settings` (`{"section/key": value}`) are written to the project's `override.cfg`
-while the job runs, so a game a pass launches with `--path` reads them and
-`project.godot` never changes. The file carries a `[steamroller]` mark; one
-without it is the project's own, and a batch refuses to start while it exists.
-One left behind by an editor that closed mid-job is removed when the plugin
-loads. Gitignore `override.cfg` in the project. Do not export or play from the
-editor while a batch runs: they would read the job's settings too.
+`settings` (`{"section/key": value}`) are written to an `override.cfg` while the
+job runs, so the game a pass launches reads them and `project.godot` never
+changes: beside the copied build's game (above), or else the project's own, which
+the editor binary reads with `--path`. The project's file carries a
+`[steamroller]` mark; one without it is the project's own, and a batch refuses to
+start while it exists. One left behind by an editor that closed mid-job is removed
+when the plugin loads. Gitignore `override.cfg` in the project. Do not export or
+play from the editor while such a batch runs: they would read the job's settings
+too.
+
+**The film's window.** An exported game whose project starts fullscreen ignores
+`--windowed` and `--resolution`; fullscreen then draws the 3D at the screen's size
+and Movie Maker shrinks it into the project's size. Set the window in
+`render_settings` instead, which every exported build reads, old ones included:
+`display/window/size/mode: 0` with `display/window/size/window_width_override` /
+`_height_override` (Movie Maker records the window; the canvas keeps the project's
+base size).
 
 Sunset Painter's config is a full example: four film jobs over stroke tapes, each
-a Movie Maker pass of the game (`--write-movie`, `--fixed-fps`) and an ffmpeg
-pass, with `editor/movie_writer/ogv/encoding_speed` 1 for the job only.
+a Movie Maker pass of the build that recorded the tape (`--write-movie` to an AVI,
+`--fixed-fps`) and an ffmpeg pass writing the mp4 beside the tape, with
+`application/config/custom_user_dir_name` set for the film so it keeps out of the
+player's saves.
 
 ## Copy saves: `deck/pull_saves.sh`
 
 ```
-pull_saves.sh --dest DIR [--local DIR]... [--deck auto|DIR]... [--exclude PATTERN]...
-              [--require-deck] [--dry-run] -- SUBDIR...
+pull_saves.sh --dest DIR [--local DIR]... [--deck auto|DIR]... [--deck-prefix PREFIX]
+              [--exclude PATTERN]... [--require-deck] [--dry-run] -- SUBDIR...
 ```
 
 Merges each `SUBDIR` (say `saves`, or `sunsets photos`) of every source folder
-into `DEST/SUBDIR`: a file is copied when the destination lacks it or the
+into `DEST/SUBDIR`. With `--deck-prefix` every file from the Deck arrives with
+PREFIX before its first name below `SUBDIR` (`sunsets/Sunset_0/tape_0.tape` →
+`sunsets/Deck_Sunset_0/tape_0.tape`): for a game whose save names repeat from
+one machine to the next, so the Deck's never mix with this PC's under one name.
+A file is copied when the destination lacks it or the
 source's copy is newer; a file with the same contents is left alone whatever its
 date; sources are never changed. Two sources holding different contents under one
 name (a save edited on two machines between syncs) is a **conflict**: the newer
 copy is kept and a `conflict:` line names the file and both sources. Steam
 Cloud's `steam_autocloud.vdf` markers and `*.tmp` files are never copied
-(`--exclude` adds patterns); a `--local` folder given twice is read once. `--deck auto` finds the Deck's user folders as `deploy.sh` does
-(`DECK_USER_DIR`, else `~/.local/share/<custom_user_dir_name>`), plus the demo
-export's folder when `project.godot` names one. An unreachable Deck is a warning
+(`--exclude` adds patterns); a `--local` folder given twice is read once. `--deck auto` is the
+user folder of the build `deploy.sh` pushes, as `deploy.sh --print-user-dir`
+names it, and nothing else: a copy of the game installed from Steam saves for its
+player. An unreachable Deck is a warning
 and the local folders are still copied, unless `--require-deck`. The template
-wires it as **Copy saves** beside **Record gameplay**, into
+wires it as **Copy saves** beside **Record gameplay** (`--local ${USER_DIR}
+--deck auto --deck-prefix Deck_`, ticking Record gameplay too), into
 `${BUILDS_DIR}/latest`, where the archive step keeps them with the build; edit
 the folder names after `--` for your game.
 
@@ -264,8 +303,9 @@ bash addons/steamroller/deck/deploy.sh --doctor
 
 `data/deck.env` holds the Deck's address and the Godot binary; gitignore it.
 Everything else is derived from `project.godot`: the devkit title from
-`application/config/name`, the Deck-side `user://` from the same name (or the
-custom user folder), the export folder from the preset's `export_path` (default
+`application/config/name`, the Deck-side `user://` from the preset's own user
+folder (`custom_user_dir_name.<feature>` for one of its custom features, else
+`custom_user_dir_name`, else the name), the export folder from the preset's `export_path` (default
 preset `Deck_Testing`; keep it out of the depot folders), and the wipe guard from
 `BUILDS_DIR` (default `<project>/../builds`). `--env FILE` reads another file.
 
@@ -273,7 +313,11 @@ Flags: `--release`, `--no-export`, `--no-launch`, `--launch` (re-register and ru
 what is on the Deck), `--stop`, `--debugger[=HOST]` (appends
 `--remote-debug tcp://HOST:6007`; the editor needs *Debug > Keep Debug Server
 Open*), `--clean-cache` (clears the shader caches under the Deck's `user://`;
-saves, logs and prefs are kept), `--tail` (follow the Deck's
+saves, logs and prefs are kept), `--clear-user-dir` (deletes the build's whole
+`user://` on the Deck before the launch, for a fresh first run; refused, before
+anything is exported, when another preset's export resolves to the same folder,
+since an installed Steam copy saves there), `--print-user-dir` (prints that
+folder and exits; `pull_saves.sh` asks it), `--tail` (follow the Deck's
 `user://logs/godot.log` until the game exits), `--run ARGS...`, `--doctor`,
 `--dry-run`. Every failure prints an `ERROR` line and exits 1.
 
@@ -283,7 +327,8 @@ binary, so a `--run --bench` gate never leaves the benchmark wired to the play
 button. `--no-launch` cannot restore it and warns instead (`deploy.sh --launch`).
 
 The template wires it as **Build + run on Deck** (`RUN_COMMAND` through
-`${BASH_EXE}` with `${DECK_SCRIPT} --clean-cache`).
+`${BASH_EXE}` with `${DECK_SCRIPT} --clean-cache`); a project whose Deck test build
+has its own folder can pass `--clear-user-dir` instead.
 
 ### Benchmark: `deck/bench.sh`
 

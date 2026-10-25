@@ -7,10 +7,17 @@ class_name SteamRollerRenderPass extends Resource
 ##   ${INPUT_NAME} a file as <parent folder>_<file name without extension>,
 ##                 a folder as its name
 ##   ${INPUT_DIR}  the input's parent folder
+##   ${INPUT_HOME} a folder itself, a file's folder
+##   ${INPUT_STEM} a folder's name, a file's name without extension
 ##   ${JOB_ID}     the job's id
 ##   ${OUT_DIR}    the step's output folder (render_out_dir)
 ##   ${WORK_DIR}   a scratch folder for this input and job, deleted when the
 ##                 job succeeds and kept when it fails
+## and, when the step names render_build_exe, the build that runs the input:
+##   ${BUILD_EXE}  its game, copied into ${WORK_DIR} with its .pck and libraries
+##                 and the job's override.cfg (the build folder is never written)
+##   ${BUILD_DIR}  the build's own folder
+##   ${BUILD_VERSION} the version read from the input ("" when none was found)
 
 ## The program to run. Variables apply.
 @export var executable: String = ""

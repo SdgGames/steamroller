@@ -161,8 +161,8 @@ func _record_movie(p: Dictionary) -> bool:
 func _reencode(movie: String, p: Dictionary) -> bool:
 	var mp4 := movie.get_basename() + str(p.get("suffix", "_sample.mp4"))
 	_runner.log_line("Re-encoding with ffmpeg: %s" % mp4)
-	# -loglevel error hides ffmpeg's false "keyframe not correctly marked"
-	# warnings on Godot's OGV files (FFmpeg #11628).
+	# -loglevel error keeps the console to the progress line and real errors
+	# (it also hides FFmpeg #11628's false keyframe warnings on an OGV film).
 	var args := PackedStringArray(["-hide_banner", "-loglevel", "error", "-stats", "-y",
 		"-i", movie, "-vf", "scale=-2:1080", "-c:v", "libx264",
 		"-crf", str(p.get("crf", 23)), "-preset", str(p.get("preset", "medium")),

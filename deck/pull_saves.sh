@@ -3,13 +3,15 @@
 # pull_saves.sh -- merge a game's save folders from this machine and the Steam
 # Deck into one destination (SteamRoller's "Copy saves").
 #
-#   pull_saves.sh --dest DIR [--local DIR]... [--deck auto|DIR]... [--exclude PATTERN]...
-#                 [--require-deck] [--dry-run] [--env FILE] -- SUBDIR...
+#   pull_saves.sh --dest DIR [--local DIR]... [--deck auto|DIR]... [--deck-prefix PREFIX]
+#                 [--exclude PATTERN]... [--require-deck] [--dry-run] [--env FILE] -- SUBDIR...
 #
 # Each SUBDIR (say sunsets and photos) of every source folder is merged into
 # DEST/SUBDIR, file by file. A file is copied when DEST lacks it or the source's
 # copy is newer; a file with the same contents is left alone, whatever its date.
-# Sources are never changed.
+# Sources are never changed. With --deck-prefix the Deck's saves arrive under
+# names of their own (sunsets/Deck_Sunset_0), for a game whose save names repeat
+# from one machine to the next.
 #
 # A conflict is two sources holding different contents under one name in the
 # same run (a save edited on both machines between two syncs): the newer copy is
@@ -20,12 +22,16 @@
 #   --local DIR       a user data folder on this machine (repeatable; an empty
 #                     value is skipped, so an unset variable is harmless, and a
 #                     folder given twice is read once)
-#   --deck auto       the Deck's user data folders, found as deploy.sh finds them:
-#                     DECK_USER_DIR from deck.env, else ~/.local/share/<the
-#                     project's custom_user_dir_name> (or godot/app_userdata/
-#                     <config/name>); plus the demo export's own folder when
-#                     project.godot names one (custom_user_dir_name.demo)
+#   --deck auto       the user data folder of the build deploy.sh pushes, as
+#                     `deploy.sh --print-user-dir` names it (DECK_USER_DIR from
+#                     deck.env, else the export preset's own folder). Only that
+#                     build's: a copy of the game installed from Steam saves for
+#                     its player, and is never read
 #   --deck DIR        one Deck-side folder ($HOME expands on the Deck)
+#   --deck-prefix PREFIX
+#                     put PREFIX before the first name below SUBDIR of every file
+#                     from the Deck: sunsets/Sunset_0/tape_0.tape arrives as
+#                     sunsets/Deck_Sunset_0/tape_0.tape
 #   --exclude PATTERN a file name never copied (a shell pattern; repeatable).
 #                     Always excluded: steam_autocloud.vdf (Steam Cloud's marker in
 #                     every synced folder, not save data) and *.tmp (a save being
@@ -74,6 +80,7 @@ LOCALS=()
 DECKS=()
 SUBDIRS=()
 EXCLUDES=("steam_autocloud.vdf" "*.tmp")
+DECK_PREFIX=""
 REQUIRE_DECK=0
 DRY=0
 while [ $# -gt 0 ]; do
@@ -84,13 +91,15 @@ while [ $# -gt 0 ]; do
 		--local=*)      LOCALS+=("${1#*=}"); shift ;;
 		--deck)         DECKS+=("${2-}"); shift 2 ;;
 		--deck=*)       DECKS+=("${1#*=}"); shift ;;
+		--deck-prefix)  DECK_PREFIX="${2-}"; shift 2 ;;
+		--deck-prefix=*) DECK_PREFIX="${1#*=}"; shift ;;
 		--exclude)      EXCLUDES+=("${2-}"); shift 2 ;;
 		--exclude=*)    EXCLUDES+=("${1#*=}"); shift ;;
 		--require-deck) REQUIRE_DECK=1; shift ;;
 		--dry-run)      DRY=1; shift ;;
 		--env)          ENV_FILE="${2-}"; shift 2 ;;
 		--env=*)        ENV_FILE="${1#*=}"; shift ;;
-		-h|--help)      sed -n '2,40p' "$0"; exit 0 ;;
+		-h|--help)      sed -n '2,47p' "$0"; exit 0 ;;
 		--)             shift; SUBDIRS=("$@"); break ;;
 		*)              die "unknown argument: $1 (--help)" ;;
 	esac
@@ -145,9 +154,10 @@ take() {
 	COPIED=$((COPIED + 1))
 }
 
-# merge ROOT SUBDIR LABEL: ROOT/SUBDIR into DEST/SUBDIR, file by file.
+# merge ROOT SUBDIR LABEL [PREFIX]: ROOT/SUBDIR into DEST/SUBDIR, file by file,
+# PREFIX before each file's first name below SUBDIR.
 merge() {
-	local root="$1" sub="$2" label="$3" f rel dst earlier
+	local root="$1" sub="$2" label="$3" prefix="${4:-}" f rel dst earlier
 	[ -d "$root/$sub" ] || return 0
 	while IFS= read -r -d '' f; do
 		rel="${f#"$root"/}"
@@ -155,7 +165,7 @@ merge() {
 			SKIPPED=$((SKIPPED + 1))
 			continue
 		fi
-		dst="$DEST/$rel"
+		dst="$DEST/$sub/$prefix${rel#"$sub"/}"
 		earlier="${FROM[$dst]:-}"
 		if [ -n "$earlier" ]; then
 			# Another source gave this file earlier in the run.
@@ -217,19 +227,10 @@ done
 
 # --- The Deck ------------------------------------------------------------------
 
-# The Deck-side folders --deck auto stands for, one per line ($HOME literal).
-deck_auto_dirs() {
-	local custom demo
-	if [ -n "${DECK_USER_DIR:-}" ]; then
-		printf '%s\n' "$DECK_USER_DIR"
-	elif [ "$(project_setting config/use_custom_user_dir)" = "true" ] \
-			&& custom="$(project_setting config/custom_user_dir_name)" && [ -n "$custom" ]; then
-		printf '%s\n' "\$HOME/.local/share/$custom"
-	else
-		printf '%s\n' "\$HOME/.local/share/godot/app_userdata/$(project_setting config/name)"
-	fi
-	demo="$(project_setting 'config/custom_user_dir_name\.demo')"
-	if [ -n "$demo" ]; then printf '%s\n' "\$HOME/.local/share/$demo"; fi
+# The Deck-side folder --deck auto stands for ($HOME literal): the pushed build's,
+# named by deploy.sh, so the two scripts never disagree.
+deck_auto_dir() {
+	"$BASH" "$SCRIPT_DIR/deploy.sh" --env "$ENV_FILE" --print-user-dir
 }
 
 if [ "${#DECKS[@]}" -gt 0 ]; then
@@ -241,7 +242,12 @@ if [ "${#DECKS[@]}" -gt 0 ]; then
 		n=0
 		for spec in "${DECKS[@]}"; do
 			[ -n "$spec" ] || continue
-			if [ "$spec" = "auto" ]; then mapfile -t dirs < <(deck_auto_dirs); else dirs=("$spec"); fi
+			if [ "$spec" = "auto" ]; then
+				auto="$(deck_auto_dir)" || die "deploy.sh could not name the Deck's user data folder"
+				dirs=("$auto")
+			else
+				dirs=("$spec")
+			fi
 			for rdir in "${dirs[@]}"; do
 				present=()
 				for sub in "${SUBDIRS[@]}"; do
@@ -257,8 +263,8 @@ if [ "${#DECKS[@]}" -gt 0 ]; then
 				mkdir -p "$work"
 				# tar keeps the Deck's file times, which the newest-wins rule reads.
 				deck "tar -C \"$rdir\" -cf - ${present[*]}" | tar -C "$work" -xf -
-				for sub in "${present[@]}"; do merge "$work" "$sub" "the Deck's $(basename "$shown")"; done
-				summary "Deck, $shown"
+				for sub in "${present[@]}"; do merge "$work" "$sub" "the Deck's $(basename "$shown")" "$DECK_PREFIX"; done
+				summary "Deck, $shown${DECK_PREFIX:+ (as $DECK_PREFIX*)}"
 			done
 		done
 	fi
