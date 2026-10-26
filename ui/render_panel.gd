@@ -89,7 +89,10 @@ func _fill_inputs() -> void:
 		for item in SteamRollerRenderQueue.list_inputs(step, runner.vars, source):
 			var path := str(item["path"])
 			var when := Time.get_datetime_string_from_unix_time(int(item["modified"]) + bias_s, true)
-			var i := _list.add_item("%s   %s   %s" % [item["label"],
+			var seconds := float(item["seconds"])
+			var length := "" if seconds < 0.0 else \
+				"   " + SteamRollerShell.format_duration(roundi(seconds * 1000.0))
+			var i := _list.add_item("%s%s   %s   %s" % [item["label"], length,
 				String.humanize_size(int(item["bytes"])), when.substr(5, 11)])
 			_list.set_item_tooltip(i, path)
 			_input_paths.append(path)

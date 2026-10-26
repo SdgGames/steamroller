@@ -27,7 +27,11 @@ const SCAN_DEPTH := 5
 ## The variables a job adds (structural: the names passes and render_out_dir
 ## write; render_out_dir may use any but OUT_DIR).
 const JOB_VARIABLES: Array[String] = ["INPUT", "INPUT_NAME", "INPUT_DIR", "INPUT_HOME",
-	"INPUT_STEM", "JOB_ID", "OUT_DIR", "WORK_DIR", "BUILD_DIR", "BUILD_EXE", "BUILD_VERSION"]
+	"INPUT_STEM", "INPUT_SOURCE", "JOB_ID", "OUT_DIR", "WORK_DIR", "BUILD_DIR", "BUILD_EXE",
+	"BUILD_VERSION"]
+## How much of an input's end is read for its length (render_length_pattern):
+## a long last line still fits, and a scan of many inputs stays quick.
+const LENGTH_TAIL_BYTES := 65536
 ## The libraries an export loads from beside its game, by platform: they travel
 ## with it into the job's scratch folder, with its .pck (structural: an
 ## export's own file layout).
@@ -72,24 +76,27 @@ static func list_sources(step: SteamRollerStep, vars: SteamRollerVariables) -> A
 
 
 ## The inputs under one source folder: { "path", "label", "is_dir", "bytes",
-## "modified", "count" }. With render_include_folders, each folder that holds
-## inputs comes first as one input (all of them), newest first, then each file.
-## A label is the input's path below the source, so two folders of one name in
-## different places stay apart.
+## "modified", "count", "seconds" }. With render_include_folders, each folder
+## that holds inputs comes first as one input (all of them), newest first, then
+## each file. A label is the input's path below the source, so two folders of
+## one name in different places stay apart. "seconds" is the input's length
+## (render_length_pattern; a folder's is its inputs' sum), -1 when unknown.
 static func list_inputs(step: SteamRollerStep, vars: SteamRollerVariables,
 		source: String) -> Array[Dictionary]:
 	var files: Array[String] = []
 	_find(source, step.render_pattern, SCAN_DEPTH, _skipped_dirs(step, vars), files, false)
 	var by_dir: Dictionary[String, Array] = {}
+	var seconds: Dictionary[String, float] = {}
 	var out: Array[Dictionary] = []
 	for f in files:
 		var dir := f.get_base_dir()
 		if not by_dir.has(dir):
 			by_dir[dir] = []
 		by_dir[dir].append(f)
+		seconds[f] = _length_of(step, f)
 		out.append({"path": f, "label": "%s · %s" % [_below(dir, source), f.get_file()],
 			"is_dir": false, "bytes": FileAccess.get_size(f),
-			"modified": FileAccess.get_modified_time(f), "count": 1})
+			"modified": FileAccess.get_modified_time(f), "count": 1, "seconds": seconds[f]})
 	out.sort_custom(_newest_first)
 	if not step.render_include_folders:
 		return out
@@ -97,12 +104,15 @@ static func list_inputs(step: SteamRollerStep, vars: SteamRollerVariables,
 	for dir: String in by_dir:
 		var bytes := 0
 		var newest := 0
+		var total := 0.0
 		for f: String in by_dir[dir]:
 			bytes += FileAccess.get_size(f)
 			newest = maxi(newest, FileAccess.get_modified_time(f))
+			total += maxf(seconds[f], 0.0)
 		var n := by_dir[dir].size()
 		dirs.append({"path": dir, "label": "%s/ (all %d)" % [_below(dir, source), n], "is_dir": true,
-			"bytes": bytes, "modified": newest, "count": n})
+			"bytes": bytes, "modified": newest, "count": n,
+			"seconds": total if not step.render_length_pattern.is_empty() else -1.0})
 	dirs.sort_custom(_newest_first)
 	dirs.append_array(out)
 	return dirs
@@ -231,6 +241,7 @@ func _run_job(step: SteamRollerStep, job: SteamRollerRenderJob, input: String,
 		"INPUT": input, "INPUT_NAME": input_id, "INPUT_DIR": input.get_base_dir(),
 		"INPUT_HOME": input if is_dir else input.get_base_dir(),
 		"INPUT_STEM": input.get_file() if is_dir else input.get_file().get_basename(),
+		"INPUT_SOURCE": _source_of(step, _runner.vars, input),
 		"JOB_ID": job.id, "WORK_DIR": work,
 	}
 	var settings := step.render_settings.duplicate()
@@ -364,6 +375,42 @@ static func _version_of(step: SteamRollerStep, input: String) -> String:
 	if found == null or found.get_group_count() < 1:
 		return ""
 	return found.get_string(1)
+
+
+## The length render_length_pattern finds in the input's last line that holds
+## it (seconds), or -1. Only the file's end is read (LENGTH_TAIL_BYTES), from
+## the last line back, so a line cut short by a crash is passed over.
+static func _length_of(step: SteamRollerStep, file: String) -> float:
+	if step.render_length_pattern.is_empty():
+		return -1.0
+	var fa := FileAccess.open(file, FileAccess.READ)
+	if fa == null:
+		return -1.0
+	var size := fa.get_length()
+	fa.seek(maxi(size - LENGTH_TAIL_BYTES, 0))
+	var lines := fa.get_buffer(mini(size, LENGTH_TAIL_BYTES)).get_string_from_utf8().split("\n", false)
+	var re := RegEx.create_from_string(step.render_length_pattern)
+	for i in range(lines.size() - 1, -1, -1):
+		var found := re.search(lines[i])
+		if found != null and found.get_group_count() >= 1 and found.get_string(1).is_valid_float():
+			return found.get_string(1).to_float()
+	return -1.0
+
+
+## The source folder an input was found in (${INPUT_SOURCE}): the scan root's
+## subfolder it sits under, or the root itself for the root's own inputs; the
+## input's home when it is under no scan root.
+static func _source_of(step: SteamRollerStep, vars: SteamRollerVariables, input: String) -> String:
+	for raw in step.render_scan_dirs:
+		var root := _clean(vars.resolve(raw))
+		if root.is_empty() or not input.begins_with(root + "/"):
+			continue
+		var below := input.substr(root.length() + 1)
+		var slash := below.find("/")
+		if slash < 0:
+			return input if DirAccess.dir_exists_absolute(input) else root
+		return root.path_join(below.substr(0, slash))
+	return input if DirAccess.dir_exists_absolute(input) else input.get_base_dir()
 
 
 ## Delete a scratch folder this queue made, and everything in it.

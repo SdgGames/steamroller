@@ -155,7 +155,7 @@ enum Action {
 @export var render_include_folders: bool = false
 ## RENDER_QUEUE: where the results go: the jobs' ${OUT_DIR}. Variables apply,
 ## the job's own too (all but ${OUT_DIR}): "${INPUT_HOME}" puts each result
-## beside its input.
+## beside its input, "${INPUT_SOURCE}" in the source folder it was found in.
 @export var render_out_dir: String = ""
 ## RENDER_QUEUE: the game inside a build folder ("game_depot/Game.exe"). Set,
 ## each input is run by an exported build instead of the editor: the build
@@ -169,6 +169,11 @@ enum Action {
 ## "\"game\":\"([^\"]+)\"". The build folder named that version, or starting
 ## with it and "_", runs it. Empty = the build the input sits in.
 @export var render_version_pattern: String = ""
+## RENDER_QUEUE: a regular expression whose first group is an input's length
+## in seconds, read from its last line that holds it (a folder: its inputs'
+## sum), shown beside it in the list, e.g. "\"t\":([0-9.eE+-]+)". Empty = no
+## length.
+@export var render_length_pattern: String = ""
 ## RENDER_QUEUE: where each job's scratch folder (${WORK_DIR}) is made.
 ## Empty = a folder in the OS cache directory. Variables apply.
 @export var render_work_dir: String = ""

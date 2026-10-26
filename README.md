@@ -148,7 +148,9 @@ row offers:
 - **Source**: each folder under `render_scan_dirs` that holds inputs, newest first;
 - the **inputs** found in it: every file matching `render_pattern`, and with
   `render_include_folders` every folder that holds some, as one input; select any
-  number;
+  number. With `render_length_pattern` (a regular expression whose first group is
+  seconds, matched against an input's last lines) each shows its length, a
+  folder the sum of its inputs';
 - one **checkbox per job** (`render_jobs`), ticked as the job's `checked` says;
 - **Render selected**, which runs every selected input through every ticked job,
   one after the other; a job that fails is named at the end and the batch goes on.
@@ -166,8 +168,9 @@ Passes may use, besides every variable above:
 | `${INPUT_DIR}` | the input's folder |
 | `${INPUT_HOME}` | a folder input itself, a file input's folder |
 | `${INPUT_STEM}` | a folder's name, a file's name without extension |
+| `${INPUT_SOURCE}` | the **Source** folder the input was found in: the scan root's subfolder it sits under (the root itself for the root's own inputs) |
 | `${JOB_ID}` | the job's id |
-| `${OUT_DIR}` | `render_out_dir` (which may use every variable here but itself, so `${INPUT_HOME}` puts each result beside its input), created if missing |
+| `${OUT_DIR}` | `render_out_dir` (which may use every variable here but itself, so `${INPUT_HOME}` puts each result beside its input and `${INPUT_SOURCE}` at the top of its source folder; name results with `${INPUT_NAME}` there, so two inputs of one name in different folders stay apart), created if missing |
 | `${WORK_DIR}` | a scratch folder for this input and job under `render_work_dir` (default: the OS cache folder), deleted when the job succeeds, kept when it fails |
 | `${BUILD_EXE}` | with `render_build_exe`: the build's game, copied into `${WORK_DIR}` |
 | `${BUILD_DIR}` · `${BUILD_VERSION}` | with `render_build_exe`: the build's folder, and the version read from the input |
