@@ -1,10 +1,14 @@
 @tool
 class_name SteamRollerRenderPanel extends SteamRollerStepRow
-## A RENDER_QUEUE step's row: a source folder, the inputs found in it (select
-## any number, Ctrl/Shift-click), and a checkbox per job. Its button runs every
-## selected input through every ticked job (SteamRollerRenderQueue).
+## A RENDER_QUEUE step's row: a source folder, which build films (when the step
+## runs exported builds and reads versions), the inputs found in the folder
+## (select any number, Ctrl/Shift-click), and a checkbox per job. Its button runs
+## every selected input through every ticked job (SteamRollerRenderQueue).
 
 var _sources: OptionButton
+## "Film with": a SteamRollerStep.RenderBuild per item; null when the step has
+## only the one build to offer.
+var _build_from: OptionButton = null
 var _list: ItemList
 var _summary: Label
 var _jobs: Dictionary[String, CheckBox] = {}
@@ -28,6 +32,22 @@ func _build_body() -> void:
 	rescan.tooltip_text = "Look again for folders and files"
 	rescan.pressed.connect(_fill_sources)
 	source_row.add_child(rescan)
+
+	if not step.render_build_exe.is_empty() and not step.render_version_pattern.is_empty():
+		var build_row := HBoxContainer.new()
+		add_child(build_row)
+		var build_label := Label.new()
+		build_label.text = "Film with"
+		build_row.add_child(build_label)
+		_build_from = OptionButton.new()
+		_build_from.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_build_from.add_item("the build it sits in", SteamRollerStep.RenderBuild.HOME)
+		_build_from.set_item_tooltip(0, "The game in the folder above the input: a recording "
+			+ "kept in a later build is filmed by that build")
+		_build_from.add_item("the build that recorded it", SteamRollerStep.RenderBuild.RECORDED)
+		_build_from.set_item_tooltip(1, "The archived build named by the input's version")
+		_build_from.select(_build_from.get_item_index(step.render_build_from))
+		build_row.add_child(_build_from)
 
 	_list = ItemList.new()
 	_list.select_mode = ItemList.SELECT_MULTI
@@ -60,7 +80,10 @@ func _build_body() -> void:
 func _overrides_for(e: ButtonEntry) -> Dictionary:
 	if e.step != step:
 		return {}
-	return {"inputs": Array(_selected_inputs()), "jobs": Array(_ticked_jobs())}
+	var out := {"inputs": Array(_selected_inputs()), "jobs": Array(_ticked_jobs())}
+	if _build_from:
+		out["build"] = _build_from.get_selected_id()
+	return out
 
 
 func _can_run(e: ButtonEntry) -> bool:

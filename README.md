@@ -146,6 +146,9 @@ A `RENDER_QUEUE` step turns files into videos (or anything else) in a batch. Its
 row offers:
 
 - **Source**: each folder under `render_scan_dirs` that holds inputs, newest first;
+- **Film with** (with `render_build_exe` and `render_version_pattern`): *the build
+  it sits in* or *the build that recorded it*, starting at `render_build_from`
+  (below);
 - the **inputs** found in it: every file matching `render_pattern`, and with
   `render_include_folders` every folder that holds some, as one input; select any
   number. With `render_length_pattern` (a regular expression whose first group is
@@ -177,17 +180,26 @@ Passes may use, besides every variable above:
 
 **An exported build per input.** With `render_build_exe` set (the game inside a
 build folder, `game_depot/Game.exe`), each input runs on an exported build instead
-of the editor, so a recording made by an old version plays on that version.
-`render_version_pattern` is a regular expression whose first group is the version,
-read from the input's first line (a folder input: its last input's, in natural
-order); the build is the scan root's folder named that version, or starting with
-it and `_` (the archive step's `${VERSION}_${COMMIT_MESSAGE_SLUG}`), the newest if
-several. Without a version, or with one never archived, it is the nearest folder
-above the input that holds the game (`latest`). The game is copied into
-`${WORK_DIR}` with its `.pck` and this platform's libraries, and the job's
-`override.cfg` beside it, where an export reads it: a build folder is never
-written, and an export template has no `--main-pack` to load a pack from elsewhere.
-Passes run `${BUILD_EXE}` without `--path`.
+of the editor. Two builds can run it:
+
+- **the build it sits in**: the nearest folder above the input that holds the game.
+  A recording copied into a later build (`latest`, say) is there to be filmed by
+  that build: again after a fix, or for a before and after;
+- **the build that recorded it**: `render_version_pattern` is a regular expression
+  whose first group is the version, read from the input's first line (a folder
+  input: its last input's, in natural order); the build is the scan root's folder
+  named that version, or starting with it and `_` (the archive step's
+  `${VERSION}_${COMMIT_MESSAGE_SLUG}`), the newest if several. A recording made by
+  an old version plays on that version.
+
+`render_build_from` picks one (`HOME`, the default, or `RECORDED`), and the row's
+**Film with** changes it for a batch. Each stands in for the other when it has no
+game (a version never archived, no game above the input), and the console says
+which build filmed each input and why. The game is copied into `${WORK_DIR}` with
+its `.pck` and this platform's libraries, and the job's `override.cfg` beside it,
+where an export reads it: a build folder is never written, and an export template
+has no `--main-pack` to load a pack from elsewhere. Passes run `${BUILD_EXE}`
+without `--path`.
 
 **Project settings for one job.** The step's `render_settings` and the job's
 `settings` (`{"section/key": value}`) are written to an `override.cfg` while the
@@ -209,7 +221,7 @@ and Movie Maker shrinks it into the project's size. Set the window in
 base size).
 
 Sunset Painter's config is a full example: four film jobs over stroke tapes, each
-a Movie Maker pass of the build that recorded the tape (`--write-movie` to an AVI,
+a Movie Maker pass of an exported build (`--write-movie` to an AVI,
 `--fixed-fps`) and an ffmpeg pass writing the mp4 beside the tape, with
 `application/config/custom_user_dir_name` set for the film so it keeps out of the
 player's saves.

@@ -72,6 +72,15 @@ enum Action {
 	RENDER_QUEUE = 17,
 }
 
+## Which exported build films a RENDER_QUEUE input (render_build_from). Stored
+## as numbers in config files, so a value is only ever appended.
+enum RenderBuild {
+	## The nearest folder above the input that holds the game: the build it sits in.
+	HOME = 0,
+	## The build named by the version the input was recorded with.
+	RECORDED = 1,
+}
+
 ## Stable identifier: what `depends_on`, `attach_to` and `step_ids` name. A
 ## step with no id cannot be ticked, gated on, or attached to.
 @export var id: String = ""
@@ -158,17 +167,24 @@ enum Action {
 ## beside its input, "${INPUT_SOURCE}" in the source folder it was found in.
 @export var render_out_dir: String = ""
 ## RENDER_QUEUE: the game inside a build folder ("game_depot/Game.exe"). Set,
-## each input is run by an exported build instead of the editor: the build
-## named by the input's version (render_version_pattern), else the nearest
-## folder above the input that holds it. Passes get ${BUILD_EXE}: a copy of
-## it in the job's scratch folder. Empty = passes run whatever they name
-## (${GODOT_EXE}).
+## each input is run by an exported build instead of the editor, the one
+## render_build_from picks: the nearest folder above the input that holds it,
+## or the build named by the input's version (render_version_pattern). Passes
+## get ${BUILD_EXE}: a copy of it in the job's scratch folder. Empty = passes
+## run whatever they name (${GODOT_EXE}).
 @export var render_build_exe: String = ""
 ## RENDER_QUEUE: a regular expression whose first group is the version that
 ## made an input, read from its first line (a folder: its last input's), e.g.
 ## "\"game\":\"([^\"]+)\"". The build folder named that version, or starting
-## with it and "_", runs it. Empty = the build the input sits in.
+## with it and "_", is the build that recorded it (render_build_from). Empty =
+## always the build the input sits in.
 @export var render_version_pattern: String = ""
+## RENDER_QUEUE: which build films an input when both are known. HOME: the
+## build it sits in, so a recording kept in a later build's folder is filmed
+## again by that build (after a fix, or for a before and after). RECORDED: the
+## build that recorded it. Each stands in for the other when it has no game.
+## The row's "Film with" choice starts here.
+@export var render_build_from := RenderBuild.HOME
 ## RENDER_QUEUE: a regular expression whose first group is an input's length
 ## in seconds, read from its last line that holds it (a folder: its inputs'
 ## sum), shown beside it in the list, e.g. "\"t\":([0-9.eE+-]+)". Empty = no

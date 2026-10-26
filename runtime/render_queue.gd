@@ -128,44 +128,84 @@ static func input_name(path: String) -> String:
 
 
 ## The exported build that runs an input's passes (render_build_exe set):
-## { "dir", "exe", "version", "recorded" }, or {} when none holds the game.
-## The version is read from the input with render_version_pattern (a folder's
-## last input in natural order: its last sitting); the build is the scan
-## root's subfolder named that version, or starting with it and "_", the
-## newest if several ("recorded" true). Failing that, the nearest folder above
-## the input that holds the game (a build not archived yet, or a version that
-## never was).
+## { "dir", "exe", "version", "recorded", "why" }, or {} when none holds the
+## game. Two builds can: the nearest folder above the input that holds the game
+## (the build it sits in), and the scan root's subfolder named the input's
+## version, or starting with it and "_", the newest if several (the build that
+## recorded it: "recorded" true). The version is read with
+## render_version_pattern (a folder's last input in natural order: its last
+## sitting). `from` (SteamRollerStep.RenderBuild) says which one films; the
+## other stands in when it has no game, and "why" then says so.
 static func find_build(step: SteamRollerStep, vars: SteamRollerVariables,
-		input: String) -> Dictionary:
+		input: String, from: int) -> Dictionary:
 	var exe_rel := step.render_build_exe
 	var version := _version_of(step, input)
-	if not version.is_empty():
-		var best := ""
-		var best_time := -1
-		for raw in step.render_scan_dirs:
-			var root := _clean(vars.resolve(raw))
-			if root.is_empty() or not DirAccess.dir_exists_absolute(root):
-				continue
-			for sub in DirAccess.get_directories_at(root):
-				if sub != version and not sub.begins_with(version + "_"):
-					continue
-				var exe := root.path_join(sub).path_join(exe_rel)
-				if FileAccess.file_exists(exe) and FileAccess.get_modified_time(exe) > best_time:
-					best_time = FileAccess.get_modified_time(exe)
-					best = root.path_join(sub)
-		if not best.is_empty():
-			return {"dir": best, "exe": best.path_join(exe_rel), "version": version,
-				"recorded": true}
+	var home := _home_build(exe_rel, input)
+	var recorded := _recorded_build(step, vars, exe_rel, version)
+	var dir := home
+	var why := ""
+	if from == SteamRollerStep.RenderBuild.RECORDED:
+		dir = recorded
+		if dir.is_empty() and not home.is_empty():
+			dir = home
+			why = "its version was never archived" if not version.is_empty() else "it names no version"
+	elif dir.is_empty() and not recorded.is_empty():
+		dir = recorded
+		why = "no game in a folder above it"
+	if dir.is_empty():
+		return {}
+	return {"dir": dir, "exe": dir.path_join(exe_rel), "version": version,
+		"recorded": dir == recorded, "why": why}
+
+
+## The nearest folder above `input` (a folder input: itself first) that holds
+## the game: the build it sits in. "" when none does.
+static func _home_build(exe_rel: String, input: String) -> String:
 	var dir := input if DirAccess.dir_exists_absolute(input) else input.get_base_dir()
 	for _level in 64:
 		if FileAccess.file_exists(dir.path_join(exe_rel)):
-			return {"dir": dir, "exe": dir.path_join(exe_rel), "version": version,
-				"recorded": false}
+			return dir
 		var up := dir.get_base_dir()
 		if up.is_empty() or up == dir:
 			break
 		dir = up
-	return {}
+	return ""
+
+
+## The build `version` names under a scan root: the subfolder named it, or
+## starting with it and "_" (the archive step's ${VERSION}_${COMMIT_MESSAGE_SLUG}),
+## the newest if several. "" when the version is empty or was never archived.
+static func _recorded_build(step: SteamRollerStep, vars: SteamRollerVariables,
+		exe_rel: String, version: String) -> String:
+	if version.is_empty():
+		return ""
+	var best := ""
+	var best_time := -1
+	for raw in step.render_scan_dirs:
+		var root := _clean(vars.resolve(raw))
+		if root.is_empty() or not DirAccess.dir_exists_absolute(root):
+			continue
+		for sub in DirAccess.get_directories_at(root):
+			if sub != version and not sub.begins_with(version + "_"):
+				continue
+			var exe := root.path_join(sub).path_join(exe_rel)
+			if FileAccess.file_exists(exe) and FileAccess.get_modified_time(exe) > best_time:
+				best_time = FileAccess.get_modified_time(exe)
+				best = root.path_join(sub)
+	return best
+
+
+## The console's line for the build that films an input (find_build()).
+static func filmed_by(build: Dictionary) -> String:
+	var folder := str(build["dir"]).get_file()
+	var version := str(build["version"])
+	var line := "filmed by %s, the build it sits in" % folder
+	if build["recorded"] == true:
+		line = "filmed by %s, the build that recorded it (%s)" % [version, folder]
+	elif not version.is_empty():
+		line += " (recorded by %s)" % version
+	var why := str(build["why"])
+	return line if why.is_empty() else "%s: %s" % [line, why]
 
 
 static func override_path() -> String:
@@ -180,10 +220,12 @@ static func remove_stale_override() -> void:
 
 
 ## Run the batch. params: inputs (paths), jobs (ids), and optionally out_dir,
-## work_dir (override the step's) and keep_work (keep every scratch folder).
+## work_dir (override the step's), keep_work (keep every scratch folder) and
+## build (a SteamRollerStep.RenderBuild over the step's render_build_from).
 func run(step: SteamRollerStep, p: Dictionary) -> bool:
 	var inputs: Array = p.get("inputs", [])
 	var wanted: Array = p.get("jobs", [])
+	var from: int = p.get("build", step.render_build_from)
 	var jobs: Array[SteamRollerRenderJob] = []
 	for job in step.render_jobs:
 		if job != null and wanted.has(job.id):
@@ -218,7 +260,7 @@ func run(step: SteamRollerStep, p: Dictionary) -> bool:
 				break
 			n += 1
 			_runner.log_line("[%d/%d] %s · %s" % [n, total, job.label, _shown(step, input)])
-			if not await _run_job(step, job, input, out_template, work_root, keep_work, n):
+			if not await _run_job(step, job, input, out_template, work_root, keep_work, n, from):
 				failed.append("%s · %s" % [job.id, _shown(step, input)])
 	var took := SteamRollerShell.format_duration(Time.get_ticks_msec() - started)
 	if _runner.stop_requested():
@@ -232,7 +274,7 @@ func run(step: SteamRollerStep, p: Dictionary) -> bool:
 
 
 func _run_job(step: SteamRollerStep, job: SteamRollerRenderJob, input: String,
-		out_template: String, work_root: String, keep_work: bool, n: int) -> bool:
+		out_template: String, work_root: String, keep_work: bool, n: int, from: int) -> bool:
 	var input_id := input_name(input)
 	var is_dir := DirAccess.dir_exists_absolute(input)
 	var work := work_root.path_join("%d_%s_%s" % [n, job.id, input_id])
@@ -248,13 +290,12 @@ func _run_job(step: SteamRollerStep, job: SteamRollerRenderJob, input: String,
 	settings.merge(job.settings, true)
 	var cfg_path := override_path()
 	if not step.render_build_exe.is_empty():
-		var build := find_build(step, _runner.vars, input)
+		var build := find_build(step, _runner.vars, input, from)
 		if build.is_empty():
-			_runner.log_error("  No game build for this input: no %s in a build named by its version, nor in a folder above it." % step.render_build_exe)
+			_runner.log_error("  No game build for this input: no %s in a folder above it, nor in a build named by its version." % step.render_build_exe)
 			return false
 		var version := str(build["version"])
-		_runner.log_line("  filmed by %s (%s%s)" % [version if not version.is_empty() else "?",
-			str(build["dir"]).get_file(), "" if build["recorded"] else ", the build it sits in"])
+		_runner.log_line("  " + filmed_by(build))
 		var staged := _stage_build(str(build["exe"]), work)
 		if staged.is_empty():
 			return false
