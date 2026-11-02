@@ -15,6 +15,8 @@
 # The Deck side is deploy.sh: the preset's export folder is pushed as-is
 # (--no-export), the game is launched through Steam with --bench, and its
 # user://logs/godot.log is followed until it exits. Config: data/deck.env.
+# deploy.sh wakes the Deck's screen for the launch; once the Deck run is over
+# this script puts it back to sleep (deploy.sh --screen-off).
 #
 # Windows output is captured from stdout; a GUI Godot exe writes to an
 # inherited redirect. Every run is wrapped in `timeout` so a hung game cannot
@@ -98,6 +100,16 @@ if [ "$DECK_RC" -eq 0 ] && grep -q "^$MARKER" "$TMP/deck.log"; then
 else
 	sed "s/^/      $C_DIM/; s/\$/$C_RESET/" "$TMP/deck.log"
 	warn "deck run exited $DECK_RC"
+fi
+
+# The run is over, so the Deck's screen goes back to sleep (deploy.sh woke it for
+# the launch). A playtest leaves it on; only a benchmark ends this way. Best
+# effort: a Deck that will not take it is a warning, never a failed benchmark.
+step "Deck: putting the screen to sleep"
+if timeout -k 5 60 bash "$DEPLOY" --screen-off > "$TMP/screen.log" 2>&1; then
+	grep -E '^      ' "$TMP/screen.log" | tr -d '\r' | sed "s/^/      $C_DIM/; s/\$/$C_RESET/" || true
+else
+	warn "the Deck's screen stays on: $(grep -v '^==>' "$TMP/screen.log" | tail -n 1 | tr -d '\r' || true)"
 fi
 
 step "Results"

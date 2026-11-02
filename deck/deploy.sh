@@ -92,7 +92,8 @@ DEBUG_PORT=6007
 
 # --- Modes -----------------------------------------------------------------
 
-MODE="deploy"            # deploy | stop | launch | doctor | user-dir
+MODE="deploy"            # deploy | stop | launch | doctor | user-dir | screen
+SCREEN_STATE=""          # screen mode: on | off
 BUILD_MODE="debug"
 DO_EXPORT=1
 DO_LAUNCH=1
@@ -156,6 +157,9 @@ Usage: deploy.sh [options] [--run ARGS...]
                       preset's export saves in the same folder
   --print-user-dir    print the build's user:// on the Deck ($HOME literal) and exit
   --tail              after launch, follow user://logs/godot.log until the game exits
+  --screen-on         wake the Deck's screen and exit (gamescope: Game Mode only)
+  --screen-off        put the Deck's screen to sleep and exit; every launch wakes
+                      it again first
   --run ARGS...       extra args passed to the game binary
   --doctor            preflight checks (add --debugger to probe port 6007)
   --dry-run           print what would run; touches neither Godot nor the Deck
@@ -176,6 +180,8 @@ while [ $# -gt 0 ]; do
 		--clear-user-dir) DO_CLEAR_USER_DIR=1; shift ;;
 		--print-user-dir) MODE="user-dir"; shift ;;
 		--tail)         DO_TAIL=1; shift ;;
+		--screen-on)    MODE="screen"; SCREEN_STATE="on"; shift ;;
+		--screen-off)   MODE="screen"; SCREEN_STATE="off"; shift ;;
 		--doctor)       MODE="doctor"; shift ;;
 		--dry-run)      DRY_RUN=1; shift ;;
 		--env)          [ $# -ge 2 ] || die "--env needs a file argument"; ENV_FILE="$2"; shift 2 ;;
@@ -415,6 +421,57 @@ do_stop() {
 	info "Game exited (killed pid $pids)"
 }
 
+# The Deck's own screen, through gamescope: `off` puts the internal panel to sleep
+# (gamescopectl drm_sleep_internal_screen true), `on` wakes it. Game Mode only: with
+# no gamescope session (Desktop Mode, Steam not up) there is nothing to switch.
+# gamescopectl answers a command it does not know with "Command not found.", so its
+# output is checked as well as its exit code, and the panel's DRM power state
+# (/sys/class/drm/card*-eDP-*/dpms, On|Off) is read back a beat later: it must
+# match. With `strict` (--screen-on / --screen-off) a failure
+# is an ERROR; without it (the wake before every launch) it only warns, so a deploy
+# never stops on the screen.
+do_screen() { # on|off [strict]
+	local state="$1" strict="${2:-}" value
+	case "$state" in
+		on)  value=false ;;
+		off) value=true ;;
+		*)   die "do_screen: unknown state '$state'" ;;
+	esac
+	step "Deck screen $state"
+	local remote
+	# shellcheck disable=SC2016  # expanded by the Deck's shell, not this one
+	remote='sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
+test -S "$sock" || { echo NO_GAMESCOPE; exit 3; }
+gamescopectl drm_sleep_internal_screen '"$value"' 2>&1; rc=$?
+sleep 1
+echo "PANEL=$(cat /sys/class/drm/card*-eDP-*/dpms 2>/dev/null | head -n 1)"
+exit $rc'
+	if [ "$DRY_RUN" -eq 1 ]; then show_cmd ssh "$TARGET" "gamescopectl drm_sleep_internal_screen $value"; return 0; fi
+	local out rc=0
+	out="$(deck "$remote" 2>&1)" || rc=$?
+	local panel said
+	panel="$(sed -n 's/^PANEL=//p' <<<"$out" | tail -n 1 | tr -d '\r' || true)"
+	said="$(grep -v -e '^PANEL=' -e '^NO_GAMESCOPE' <<<"$out" | tr -d '\r' | tr '\n' ' ' || true)"
+	said="${said% }"
+	local why=""
+	if [ "$rc" -eq 255 ]; then
+		why="cannot reach $TARGET (ssh exit 255)${said:+: $said}"
+	elif grep -q '^NO_GAMESCOPE' <<<"$out"; then
+		why="no gamescope session on the Deck (Desktop Mode, or Steam not running)"
+	elif [ "$rc" -ne 0 ] || grep -qiE 'not found|fail|error' <<<"$said"; then
+		why="gamescopectl failed (exit $rc): ${said:-no output}"
+	elif [ -n "$panel" ] && [ "${panel,,}" != "$state" ]; then
+		# The panel's DPMS follows the switch at once (measured on an LCD Deck, 2026-11-02).
+		why="gamescope took the command but the panel reads '$panel'"
+	fi
+	if [ -n "$why" ]; then
+		[ "$strict" = "strict" ] && die "could not turn the Deck's screen $state: $why"
+		warn "Deck screen left as it was: $why"
+		return 0
+	fi
+	info "screen $state (panel: ${panel:-state unknown})"
+}
+
 do_prepare() {
 	# Creates ~/devkit-game/<TITLE>/ and reports its absolute path.
 	step "Preparing $DECK_TITLE on $DECK_HOST"
@@ -602,6 +659,9 @@ do_clear_user_dir() {
 }
 
 do_launch() {
+	# Every game or benchmark this script starts wakes the screen first: it may have
+	# been put to sleep between runs (--screen-off; bench.sh does it after a run).
+	do_screen on
 	step "Launching $DECK_TITLE through Steam"
 	if [ "$DRY_RUN" -eq 1 ]; then
 		show_cmd ssh "$TARGET" "python3 ~/devkit-utils/steam-devkit-rpc run-game gameid=$DECK_TITLE"
@@ -690,6 +750,7 @@ main() {
 		user-dir) printf '%s\n' "$USER_DIR"; return 0 ;;
 		doctor) doctor; return 0 ;;
 		stop)   do_stop; return 0 ;;
+		screen) do_screen "$SCREEN_STATE" strict; return 0 ;;
 		launch)
 			[ "$DO_CLEAR_USER_DIR" -eq 1 ] && check_clear_user_dir
 			require_title_on_deck

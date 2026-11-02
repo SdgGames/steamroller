@@ -352,8 +352,18 @@ saves, logs and prefs are kept), `--clear-user-dir` (deletes the build's whole
 anything is exported, when another preset's export resolves to the same folder,
 since an installed Steam copy saves there), `--print-user-dir` (prints that
 folder and exits; `pull_saves.sh` asks it), `--tail` (follow the Deck's
-`user://logs/godot.log` until the game exits), `--run ARGS...`, `--doctor`,
-`--dry-run`. Every failure prints an `ERROR` line and exits 1.
+`user://logs/godot.log` until the game exits), `--screen-on` / `--screen-off`
+(wake the Deck's own screen or put it to sleep, then exit), `--run ARGS...`,
+`--doctor`, `--dry-run`. Every failure prints an `ERROR` line and exits 1.
+
+**The Deck's screen.** `--screen-off` puts the Deck's internal panel to sleep with
+`gamescopectl drm_sleep_internal_screen true`; `--screen-on` wakes it
+(`… false`). This works in Game Mode only: gamescope must be running. The script
+reads the panel's DRM power state back (`/sys/class/drm/card*-eDP-*/dpms`). The
+switch has failed unless that reads `Off` or `On` as asked, because gamescopectl
+can answer an unknown command with `Command not found.` and still look fine.
+Every launch wakes the screen first. That wake only warns on failure, so a deploy
+never stops over the screen.
 
 **The registered argv is the Deck's play button, so `--run` and `--debugger` args
 are transient.** Once the game's pid is up the shortcut is restored to the bare
@@ -374,7 +384,10 @@ of the contract: started with `--bench` it prints one line beginning `BENCHMARK`
 and quits (`--benchmark` is an engine flag). Each run is wrapped in `timeout`
 (`BENCH_TIMEOUT`, default 300 s); a run with no `BENCHMARK` line is `FAILED` and the
 script exits 1. Every run appends a dated block to the results file (default
-`<exe dir>/../benchmark.txt`).
+`<exe dir>/../benchmark.txt`). Once the Deck run is over, `bench.sh` puts the
+Deck's screen back to sleep (`deploy.sh --screen-off`). The launch woke it, so
+the benchmark still runs on a lit panel. A Deck that will not take the switch is a
+warning, never a failed benchmark. A plain deploy leaves the screen on.
 
 ## Logs
 
