@@ -84,12 +84,31 @@ New actions are only ever appended: configs store the number.
 
 ### Running, Stop and Reset
 
-- While a step runs, every other button is disabled except **instant** ones
-  (`OPEN_IN_EXPLORER`, `COPY_TO_CLIPBOARD`), which run at once beside it. Copying
-  the commit command during an hour-long export is fine.
+- One step runs at a time. Pressing another step's button while one runs
+  **queues** it: the button shows a yellow hourglass (`queued_icon_color` in the
+  config's Advanced group), and the queue runs in the order the buttons were
+  pressed, each step when the one before it finishes.
+  Press Build + run on Deck, Run unit tests, Export All and Record gameplay in a
+  row, and they run one after another. A queued button's tooltip gives its place
+  in the queue; pressing it again takes it back out.
+- A step can be queued behind the step it waits on: a `depends_on` that a
+  running or queued step ticks when it succeeds counts as met (Run benchmark
+  behind Export All). A step that runs once per version (`EXPORT_PROJECT`) is
+  locked as soon as it is running or queued, so Debug and Release cannot both
+  wait in the queue.
+- **If a step fails or is stopped, the rest of the queue is discarded**, and the
+  failed step's console names what was dropped. So is a queued step whose gates
+  are no longer met when its turn comes (a dependency unticked by hand).
+- A step's question (`confirm_text`) is asked when its button is pressed, not
+  when its turn comes, and a Render queue step keeps the inputs and renders that
+  were selected when it was pressed.
+- **Instant** steps (`OPEN_IN_EXPLORER`, `COPY_TO_CLIPBOARD`) never queue: they
+  run at once beside whatever is running. Copying the commit command during an
+  hour-long export is fine.
 - The running step's button reads **Stop**. Stop ends its process and everything
   that process started (`taskkill /T`), or the play session it started, and a
-  batch or a chain of steps stops before its next item.
+  batch or a chain of steps stops before its next item. Stop discards the queue.
+- **Reload** abandons the running step and discards the queue.
 - A ticked step shows a check icon on its buttons, the row's own step and
   attached ones alike, whether it ran successfully or was ticked by hand. The
   row's checkbox sets the same tick by hand, to skip a step.

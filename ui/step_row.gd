@@ -9,11 +9,18 @@ class_name SteamRollerStepRow extends VBoxContainer
 ##                              steps attached to it (attach())
 ##   console                    hidden until a line arrives
 ##
-## While a button's step runs, that button reads Stop. A ticked step's buttons
-## carry a check icon, whether it ran or was ticked by hand. A step that asks a
-## question first (SteamRollerStep.confirmation) runs only on OK.
+## While a button's step runs, that button reads Stop. Pressing another button
+## meanwhile queues its step (SteamRollerStepRunner.submit): the button shows a
+## yellow hourglass until its turn, and pressing it again takes it back out. A
+## ticked step's buttons carry a check icon, whether it ran or was ticked by
+## hand. A step that asks a question first (SteamRollerStep.confirmation) asks
+## it when pressed, and runs or queues only on OK.
 
 const ConsoleScene := preload("res://addons/steamroller/ui/console_output.tscn")
+## Every icon colour of a Button, all tinted while it is queued. Locked to
+## Button's theme items.
+const ICON_COLORS: Array[StringName] = [&"icon_normal_color", &"icon_pressed_color",
+	&"icon_hover_color", &"icon_hover_pressed_color", &"icon_focus_color", &"icon_disabled_color"]
 
 ## One button and the step it runs.
 class ButtonEntry:
@@ -35,7 +42,7 @@ var _buttons: Array[ButtonEntry] = []
 ## The button whose step is running: it reads Stop.
 var _running: ButtonEntry = null
 ## The button waiting on the confirmation dialog.
-var _pending: ButtonEntry = null
+var _asking: ButtonEntry = null
 var _confirm: ConfirmationDialog = null
 ## Console ids whose lines this row's console shows: its steps' ids, and its own
 ## key for steps with none.
@@ -77,6 +84,7 @@ func setup(p_step: SteamRollerStep, p_runner: SteamRollerStepRunner) -> void:
 	runner.busy_changed.connect(func(_busy: bool) -> void: _refresh())
 	runner.variables_changed.connect(_refresh_description)
 	runner.reset_requested.connect(_on_reset)
+	runner.queue_changed.connect(_refresh)
 	_refresh()
 
 
@@ -183,45 +191,61 @@ func _on_pressed(e: ButtonEntry) -> void:
 		runner.stop()
 		_refresh()
 		return
+	if runner.queue_position(e) > 0:
+		runner.unqueue(e)
+		return
 	var question := runner.vars.resolve(e.step.confirmation())
 	if question.is_empty():
-		_run(e)
+		_press(e)
 		return
 	if _confirm == null:
 		_confirm = ConfirmationDialog.new()
 		_confirm.title = "SteamRoller"
 		_confirm.confirmed.connect(_on_confirmed)
-		_confirm.canceled.connect(func() -> void: _pending = null)
+		_confirm.canceled.connect(func() -> void: _asking = null)
 		add_child(_confirm)
-	_pending = e
+	_asking = e
 	_confirm.dialog_text = question
 	_confirm.popup_centered()
 
 
 func _on_confirmed() -> void:
-	var e := _pending
-	_pending = null
+	var e := _asking
+	_asking = null
 	if e != null:
-		_run(e)
+		_press(e)
 
 
-func _run(e: ButtonEntry) -> void:
+## An instant step runs at once; any other goes through the runner's queue,
+## which runs it at once when nothing is running. The params are taken now, so
+## a queued render keeps the inputs that were selected when it was pressed.
+func _press(e: ButtonEntry) -> void:
+	var overrides := e.overrides.duplicate()
+	overrides.merge(_overrides_for(e), true)
+	if e.step.is_instant():
+		_run(e, overrides)
+	else:
+		runner.submit(e.step, e, _run.bind(e, overrides), e.label, _console_key(e))
+
+
+## Run a press now and return whether it succeeded (false when the dock was
+## rebuilt while it ran).
+func _run(e: ButtonEntry, overrides: Dictionary) -> bool:
 	# An instant step runs beside whatever is running: it neither clears the
 	# console nor turns its button into Stop.
 	if not e.step.is_instant():
 		if _console:
 			_console.clear_log()
 		_running = e
-	var overrides := e.overrides.duplicate()
-	overrides.merge(_overrides_for(e), true)
 	var ok: bool = await runner.execute_step(e.step, overrides, _console_key(e))
 	if not is_instance_valid(e.button) or not is_inside_tree():
-		return   # the dock was rebuilt while the step ran
+		return false   # the dock was rebuilt while the step ran
 	if _running == e:
 		_running = null
 	if e.step.marks_completion():
 		runner.set_completed(e.step.id, ok)
 	_refresh()
+	return ok
 
 
 ## The console a button's output goes to: the row's step, else the button's.
@@ -239,9 +263,14 @@ func _refresh() -> void:
 	if _checkbox and _checkbox.button_pressed != runner.is_completed(step.id):
 		_checkbox.set_pressed_no_signal(runner.is_completed(step.id))
 	var busy := runner.is_busy()
+	# What the running and queued presses tick: a step behind one of them can
+	# queue, and an export already on its way locks its other button.
+	var pending := runner.pending_ticks()
 	for e in _buttons:
 		if not is_instance_valid(e.button):
 			continue
+		var place := runner.queue_position(e)
+		_tint_icon(e.button, place > 0)
 		if e == _running:
 			var stopping := runner.stop_requested()
 			e.button.text = "Stopping…" if stopping else "Stop"
@@ -249,16 +278,27 @@ func _refresh() -> void:
 			e.button.disabled = stopping
 			e.button.tooltip_text = "" if stopping else "Stop this step, and whatever it started"
 			continue
+		if place > 0:
+			e.button.text = e.label
+			e.button.icon = _queued_icon()
+			e.button.disabled = false
+			e.button.tooltip_text = "Queued (#%d): runs when the steps ahead of it finish. " % place \
+				+ "Press to take it out of the queue."
+			continue
 		var s := e.step
-		var why := runner.blocked_reason(s)
-		var locked := s.locks_when_completed() and runner.is_completed(s.id)
+		var why := runner.blocked_reason(s, true)
+		var done_once := runner.is_completed(s.id) or pending.has(s.id)
+		var locked := s.locks_when_completed() and done_once
 		e.button.text = e.label
-		e.button.disabled = (busy and not s.is_instant()) or not why.is_empty() or locked \
-			or not _can_run(e)
+		e.button.disabled = not why.is_empty() or locked or not _can_run(e)
 		if not why.is_empty():
 			e.button.tooltip_text = why
-		elif locked:
+		elif locked and runner.is_completed(s.id):
 			e.button.tooltip_text = "Done for this version: Reset unlocks it."
+		elif locked:
+			e.button.tooltip_text = "Already running or queued: it runs once per version."
+		elif busy and not s.is_instant():
+			e.button.tooltip_text = "Queue it: it runs when the steps ahead of it finish."
 		else:
 			e.button.tooltip_text = ""
 		# A ticked step shows its tick on its buttons, the row's own step as well as
@@ -266,6 +306,26 @@ func _refresh() -> void:
 		var done := s.marks_completion() and runner.is_completed(s.id)
 		e.button.icon = get_theme_icon("StatusSuccess", "EditorIcons") if done else null
 	_refresh_description()
+
+
+## The icon a queued button carries: the editor's Timer icon (an hourglass),
+## tinted by _tint_icon().
+func _queued_icon() -> Texture2D:
+	if has_theme_icon("Timer", "EditorIcons"):
+		return get_theme_icon("Timer", "EditorIcons")
+	return get_theme_icon("StatusWarning", "EditorIcons")
+
+
+## Tint a button's icon the config's queued_icon_color while it is queued, and
+## clear the tint otherwise (the check icon keeps its own green).
+func _tint_icon(button: Button, on: bool) -> void:
+	if on and runner.config == null:
+		return
+	for item in ICON_COLORS:
+		if on:
+			button.add_theme_color_override(item, runner.config.queued_icon_color)
+		elif button.has_theme_color_override(item):
+			button.remove_theme_color_override(item)
 
 
 func _refresh_description() -> void:

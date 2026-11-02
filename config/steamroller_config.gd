@@ -34,3 +34,6 @@ class_name SteamRollerConfig extends Resource
 @export_range(60, 400, 1) var button_min_width: int = 160
 ## Lines of inputs a render row's list shows before it scrolls.
 @export_range(3, 40, 1) var render_list_rows: int = 8
+## Colour of the clock on a queued step's button. Its own setting, not the
+## editor theme's warning colour, which some themes make a muted beige.
+@export var queued_icon_color: Color = Color("ffdd65")

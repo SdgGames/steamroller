@@ -18,6 +18,21 @@ signal busy_changed(busy: bool)
 ## The checklist was reset: rows clear their consoles and re-read their inputs,
 ## and the panel shows the first tab.
 signal reset_requested
+## A press joined the queue or left it, started, or the queue was discarded.
+signal queue_changed
+
+## A press of a step's button, running or waiting its turn. Presses of steps
+## that are not instant run one at a time, in the order they were made.
+class QueuedRun:
+	var step: SteamRollerStep
+	## What the pressed button is known by (the row's ButtonEntry).
+	var key: Object
+	## Runs the press; awaited, it returns whether the press succeeded.
+	var run: Callable
+	## The button's text, for messages.
+	var label: String
+	## The console the press writes to.
+	var console: String
 
 var config: SteamRollerConfig
 var vars := SteamRollerVariables.new()
@@ -38,6 +53,13 @@ var _stop_requested := false
 var _generation := 0
 ## An INPUT changed a project setting that is not saved yet.
 var _settings_dirty := false
+## Presses waiting their turn, oldest first.
+var _queue: Array[QueuedRun] = []
+## The press running now, or null.
+var _current: QueuedRun = null
+## True while _drain() works through the queue, the frame between two presses
+## included.
+var _draining := false
 
 
 func _init() -> void:
@@ -164,19 +186,24 @@ func is_enabled(s: SteamRollerStep) -> bool:
 
 
 ## Why a step cannot run yet ("" when it can): a missing addon, unticked steps
-## in depends_on, or none ticked of depends_on_any.
-func blocked_reason(s: SteamRollerStep) -> String:
+## in depends_on, or none ticked of depends_on_any. With `count_pending`, a step
+## that the running press or a queued one ticks when it succeeds counts as
+## ticked, so a press can queue behind the step it waits on.
+func blocked_reason(s: SteamRollerStep, count_pending: bool = false) -> String:
 	if missing_requirements.has(s.id):
 		return "Missing " + missing_requirements[s.id]
+	var pending: Dictionary[String, bool] = {}
+	if count_pending:
+		pending = pending_ticks()
 	var waiting := PackedStringArray()
 	for dep in s.depends_on:
-		if not is_completed(dep):
+		if not is_completed(dep) and not pending.has(dep):
 			waiting.append(_dep_label(dep))
 	if not s.depends_on_any.is_empty():
 		var any := false
 		var names := PackedStringArray()
 		for dep in s.depends_on_any:
-			any = any or is_completed(dep)
+			any = any or is_completed(dep) or pending.has(dep)
 			names.append(_dep_label(dep))
 		if not any:
 			waiting.append(" or ".join(names))
@@ -186,6 +213,26 @@ func blocked_reason(s: SteamRollerStep) -> String:
 func _dep_label(step_id: String) -> String:
 	var s := find_step(step_id)
 	return step_label(s) if s != null else "'%s'" % step_id
+
+
+## The steps that the running press and the queued ones tick when they succeed:
+## each press's step, the steps it also_ticks, and a RUN_STEPS step's
+## step_ids, followed through. Empty while nothing runs.
+func pending_ticks() -> Dictionary[String, bool]:
+	var out: Dictionary[String, bool] = {}
+	var todo: Array[SteamRollerStep] = []
+	if _current != null:
+		todo.append(_current.step)
+	for item in _queue:
+		todo.append(item.step)
+	while not todo.is_empty():
+		var s: SteamRollerStep = todo.pop_back()
+		if s == null or not s.marks_completion() or out.has(s.id):
+			continue
+		out[s.id] = true
+		for other in s.also_ticks + s.step_ids:
+			todo.append(find_step(other))
+	return out
 
 
 ## Untick every step, clear every console, show the first tab (Reset).
@@ -285,8 +332,16 @@ func execute_step(s: SteamRollerStep, overrides: Dictionary = {}, console: Strin
 ## Give up on whatever is running, after stopping its process: for a run that
 ## can no longer finish (its coroutine was cancelled by a script reload, or a
 ## script error ended it), which would otherwise leave the dock busy for good.
+## The queue goes with it.
 func abandon() -> void:
+	var queued := _draining
+	_queue.clear()
+	_current = null
+	_draining = false
 	if not is_busy():
+		if queued:
+			_generation += 1   # a drain waiting out the frame between two presses ends there
+			queue_changed.emit()
 		return
 	shell.stop()
 	if _actions.owns_play and EditorInterface.is_playing_scene():
@@ -297,6 +352,7 @@ func abandon() -> void:
 	_console_id = ""
 	push_warning("[SteamRoller] Abandoned the running step (the dock was reloaded while it ran).")
 	busy_changed.emit(false)
+	queue_changed.emit()
 
 
 ## Stop the running step: end its process (and everything it started), or the
@@ -310,6 +366,109 @@ func stop() -> void:
 	shell.stop()
 	if _actions.owns_play and EditorInterface.is_playing_scene():
 		EditorInterface.stop_playing_scene()
+
+
+# --- Queue -----------------------------------------------------------------------
+# Every press of a step that is not instant comes through submit(): it runs at
+# once when nothing is running, else it waits its turn behind the presses made
+# before it. A press that fails, is stopped, or can no longer start discards
+# everything still waiting.
+
+## Run a press now, or after the presses before it. `key` is what the button is
+## known by (queue_position, unqueue); `run` runs the press and returns whether
+## it succeeded; `label` names it in messages; `console` is where they go.
+func submit(s: SteamRollerStep, key: Object, run: Callable, label: String, console: String) -> void:
+	var item := QueuedRun.new()
+	item.step = s
+	item.key = key
+	item.run = run
+	item.label = label
+	item.console = console
+	_queue.append(item)
+	queue_changed.emit()
+	if not _draining:
+		_drain()
+
+
+## Take a waiting press out of the queue (its button was pressed again).
+func unqueue(key: Object) -> void:
+	for i in _queue.size():
+		if _queue[i].key == key:
+			_queue.remove_at(i)
+			queue_changed.emit()
+			return
+
+
+## A waiting press's place in the queue, counting from 1; 0 when it is not
+## waiting (never pressed, running, or done).
+func queue_position(key: Object) -> int:
+	for i in _queue.size():
+		if _queue[i].key == key:
+			return i + 1
+	return 0
+
+
+func _drain() -> void:
+	_draining = true
+	var generation := _generation
+	while not _queue.is_empty():
+		var item: QueuedRun = _queue.pop_front()
+		var why := _cannot_start(item)
+		if not why.is_empty():
+			_discard(item, "'%s' cannot run (%s)" % [item.label, why], true)
+			break
+		_current = item
+		queue_changed.emit()
+		var ok: bool = await item.run.call()
+		if generation != _generation:
+			return   # abandoned while it ran: the dock has moved on
+		_current = null
+		if not ok:
+			var how := "was stopped" if _stop_requested else "failed"
+			_discard(item, "'%s' %s" % [item.label, how], false)
+			break
+		if not _queue.is_empty():
+			# A frame for the dock and the editor to settle before the next press.
+			await get_tree().process_frame
+			if generation != _generation:
+				return
+	_current = null
+	_draining = false
+	queue_changed.emit()
+
+
+## Why a waiting press cannot start now ("" when it can): its button is gone,
+## its gates are no longer met (ticks only: nothing is ahead of it any more), or
+## its step ran once already this version.
+func _cannot_start(item: QueuedRun) -> String:
+	if not item.run.is_valid():
+		return "its button is gone"
+	var why := blocked_reason(item.step)
+	if not why.is_empty():
+		return why
+	if item.step.locks_when_completed() and is_completed(item.step.id):
+		return "done for this version"
+	return ""
+
+
+## Drop every waiting press after `item` failed (or, `item_dropped`, could not
+## start), and say which in the Output panel and in `item`'s console. A failure
+## with nothing waiting says nothing more: the step has said why it failed.
+func _discard(item: QueuedRun, what: String, item_dropped: bool) -> void:
+	var names := PackedStringArray()
+	for other in _queue:
+		names.append("'%s'" % other.label)
+	_queue.clear()
+	var line := ""
+	if item_dropped:
+		line = what + (": discarded it." if names.is_empty()
+			else ": discarded it and the rest of the queue: %s." % ", ".join(names))
+	elif not names.is_empty():
+		line = "%s: discarded the queue: %s." % [what, ", ".join(names)]
+	if not line.is_empty():
+		print("[SteamRoller] " + line)
+		log_line_emitted.emit(item.console, line)
+	queue_changed.emit()
 
 
 # --- Logging ---------------------------------------------------------------------
