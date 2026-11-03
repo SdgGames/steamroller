@@ -335,7 +335,11 @@ cp addons/steamroller/templates/deck.env.example data/deck.env   # fill in DECK_
 bash addons/steamroller/deck/deploy.sh --doctor
 ```
 
-`data/deck.env` holds the Deck's address and the Godot binary; gitignore it.
+`data/deck.env` holds the Deck's address, the Godot binary and `DECK_APPID`, the
+Steam app id the shortcut runs as (`force_appid`: Steam Input reads the game's
+action manifest and layouts only when the window belongs to that app; the
+devkit tool writes `steam_appid.txt` beside the binary, which the sync keeps);
+gitignore it.
 Everything else is derived from `project.godot`: the devkit title from
 `application/config/name`, the Deck-side `user://` from the preset's own user
 folder (`custom_user_dir_name.<feature>` for one of its custom features, else
@@ -344,7 +348,8 @@ preset `Deck_Testing`; keep it out of the depot folders), and the wipe guard fro
 `BUILDS_DIR` (default `<project>/../builds`). `--env FILE` reads another file.
 
 Flags: `--release`, `--no-export`, `--no-launch`, `--launch` (re-register and run
-what is on the Deck), `--stop`, `--debugger[=HOST]` (appends
+what is on the Deck), `--no-appid` (register as the shortcut's own id for one
+run: Steam Input off, for an isolated test of the no-Steam path), `--stop`, `--debugger[=HOST]` (appends
 `--remote-debug tcp://HOST:6007`; the editor needs *Debug > Keep Debug Server
 Open*), `--clean-cache` (clears the shader caches under the Deck's `user://`;
 saves, logs and prefs are kept), `--clear-user-dir` (deletes the build's whole

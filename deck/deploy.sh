@@ -26,6 +26,9 @@
 #                                       # default <project>/../builds (SteamRoller's ${BUILDS_DIR})
 #   DECK_USER_DIR=                      # user:// on the Deck; default: the preset's own,
 #                                       # from project.godot (see user_dir_of)
+#   DECK_APPID=                         # the Steam app id the shortcut runs as (force_appid):
+#                                       # Steam Input, the overlay and the layout follow it;
+#                                       # empty = the shortcut's own Non-Steam id
 #   DEBUG_HOST=                         # optional: this PC's IPv4 as seen by the Deck
 #
 # Transfer is scp guarded by a remote sha256sum comparison (no rsync on this
@@ -65,7 +68,7 @@ project_setting() {
 # Anything the caller already exported wins over deck.env, so a one-off such as
 #   DECK_HOST=192.168.1.20 deploy.sh --doctor
 # works without editing the file. Snapshot it before the defaults clobber it.
-CONFIG_VARS=(DECK_HOST DECK_USER DECK_TITLE DECK_RUNTIME GODOT_BIN EXPORT_PRESET BUILDS_DIR DECK_USER_DIR DEBUG_HOST DEBUG_PORT)
+CONFIG_VARS=(DECK_HOST DECK_USER DECK_TITLE DECK_RUNTIME GODOT_BIN EXPORT_PRESET BUILDS_DIR DECK_USER_DIR DECK_APPID DEBUG_HOST DEBUG_PORT)
 declare -A _env_override=()
 for _v in "${CONFIG_VARS[@]}"; do [ -n "${!_v+x}" ] && _env_override[$_v]="${!_v}"; done
 
@@ -87,6 +90,12 @@ BUILDS_DIR="$(cd -- "$PROJECT_DIR/.." && pwd)/builds"
 # Godot user:// on the Deck; empty = derived from project.godot below. $HOME is
 # expanded by the Deck's shell, so it stays single-quoted.
 DECK_USER_DIR=""
+# The Steam app id the devkit shortcut runs as. Steam ties the window, the overlay and
+# the controller layout to whatever LAUNCHED the process, and the devkit shortcut is
+# its own Non-Steam game: without this, Steam Input ignores the game's action manifest
+# and runs a template layout (Sunset Painter, 2026-11-03). The devkit tool writes it to
+# steam_appid.txt beside the binary and sets Steam's DevkitOverrideAppID.
+DECK_APPID=""
 DEBUG_HOST=""
 DEBUG_PORT=6007
 
@@ -97,6 +106,7 @@ SCREEN_STATE=""          # screen mode: on | off
 BUILD_MODE="debug"
 DO_EXPORT=1
 DO_LAUNCH=1
+USE_APPID=1              # --no-appid: one run as the shortcut's own id (Steam Input off)
 DO_CLEAN_CACHE=0
 DO_CLEAR_USER_DIR=0
 DO_TAIL=0
@@ -147,6 +157,9 @@ Usage: deploy.sh [options] [--run ARGS...]
   --no-export         push the existing builds/ folder, skip the export
   --no-launch         export and push only
   --launch            launch the build already on the Deck (no export, no push)
+  --no-appid          register the shortcut without DECK_APPID for this run only: the
+                      game runs as the shortcut's own Non-Steam id, so Steam Input
+                      ignores its manifest (an isolated test of the no-Steam path)
   --stop              kill the running instance on the Deck
   --debugger[=HOST]   run with --remote-debug tcp://HOST:6007 (editor must have
                       Debug > Keep Debug Server Open); HOST autodetected
@@ -173,6 +186,7 @@ while [ $# -gt 0 ]; do
 		--no-export)    DO_EXPORT=0; shift ;;
 		--no-launch)    DO_LAUNCH=0; shift ;;
 		--launch)       MODE="launch"; shift ;;
+		--no-appid)     USE_APPID=0; shift ;;
 		--stop)         MODE="stop"; shift ;;
 		--debugger)     USE_DEBUGGER=1; shift ;;
 		--debugger=*)   USE_DEBUGGER=1; DEBUGGER_HOST_OVERRIDE="${1#*=}"; shift ;;
@@ -488,6 +502,10 @@ do_prepare() {
 	info "$REMOTE_DIR_ABS"
 }
 
+# Files beside the binary that are the Deck's, not the export's: never pruned, never sent.
+# steam_appid.txt is written by steam-client-create-shortcut from DECK_APPID (do_register).
+KEEP_FILES=(steam_appid.txt)
+
 do_sync() {
 	local outdir; outdir="$(export_dir)" || die "cannot resolve export path for preset '$EXPORT_PRESET'"
 	step "Syncing to $TARGET:$REMOTE_DIR_ABS"
@@ -529,13 +547,15 @@ do_sync() {
 		sent=$((sent + 1))
 	done
 
-	# Prune so the Deck mirrors builds/ (the devkit GUI's "Delete extraneous remote files").
+	# Prune so the Deck mirrors builds/ (the devkit GUI's "Delete extraneous remote files"),
+	# except the files the devkit tool itself keeps beside the binary (KEEP_FILES): pruning
+	# steam_appid.txt took the app id override with it on every deploy (2026-11-03).
 	if [ "$DRY_RUN" -eq 1 ]; then
 		show_cmd ssh "$TARGET" "cd $(sq "$REMOTE_DIR_ABS") && find . -maxdepth 1 -type f -printf '%P\n'"
-		info "(then rm -f every remote file not in the set above)"
+		info "(then rm -f every remote file not in the set above, keeping: ${KEEP_FILES[*]})"
 	else
 		local keep remote_list stale=() rf
-		keep="$(printf '%s\n' "${files[@]}")"
+		keep="$(printf '%s\n' "${files[@]}" "${KEEP_FILES[@]}")"
 		remote_list="$(deck "cd $(sq "$REMOTE_DIR_ABS") 2>/dev/null && find . -maxdepth 1 -type f -printf '%P\n'" 2>/dev/null || true)"
 		while IFS= read -r rf; do
 			[ -n "$rf" ] || continue
@@ -592,10 +612,21 @@ do_register() {
 	settings+='}'
 	# "env" is mandatory: steam-client-create-shortcut indexes parms['env']
 	# unconditionally and dies with KeyError without it. Empty = no env vars.
-	local parms='{"gameid": "'"$DECK_TITLE"'", "directory": "'"$REMOTE_DIR_ABS"'", "argv": ["'"$(json_str "$argv")"'"], "env": {}, "settings": '"$settings"'}'
+	local parms='{"gameid": "'"$DECK_TITLE"'", "directory": "'"$REMOTE_DIR_ABS"'", "argv": ["'"$(json_str "$argv")"'"], "env": {}, "settings": '"$settings"
+	# The app id override rides on every registration, the plain one after a launch too:
+	# the shortcut Steam keeps is the Deck's play button, and it must run as the game.
+	local as_app="the shortcut's own id"
+	if [ -n "$DECK_APPID" ] && [ "$USE_APPID" -eq 1 ]; then
+		[[ "$DECK_APPID" =~ ^[0-9]+$ ]] || die "DECK_APPID '$DECK_APPID' is not a Steam app id (digits only)"
+		parms+=', "force_appid": "'"$DECK_APPID"'"'
+		as_app="app $DECK_APPID"
+	elif [ -n "$DECK_APPID" ]; then
+		as_app="the shortcut's own id (--no-appid)"
+	fi
+	parms+='}'
 	local cmd="python3 ~/devkit-utils/steam-client-create-shortcut --parms $(sq "$parms")"
 
-	step "Registering '$argv' with Steam (${DECK_RUNTIME:-native})"
+	step "Registering '$argv' with Steam (${DECK_RUNTIME:-native}, as $as_app)"
 	if [ "$DRY_RUN" -eq 1 ]; then show_cmd ssh "$TARGET" "$cmd"; return 0; fi
 	# The tool logs to stderr and prints one JSON line to stdout at the end.
 	local out rc=0
@@ -720,6 +751,18 @@ doctor() {
 		ok "title '$DECK_TITLE' exists on the Deck ($REMOTE_DIR_ABS)"
 		local argv; argv="$(deck "cat ~/devkit-game/$DECK_TITLE-argv.json 2>/dev/null" 2>/dev/null | tr -d '\r\n' || true)"
 		note "registered argv: ${argv:-<none yet>}"
+		# The app id the shortcut runs as: the devkit tool keeps it only in steam_appid.txt
+		# beside the binary (its -settings.json holds the compat tool alone).
+		local appid_file; appid_file="$(deck "cat $(sq "$REMOTE_DIR_ABS/steam_appid.txt") 2>/dev/null" 2>/dev/null | tr -d '\r\n' || true)"
+		if [ -n "$DECK_APPID" ]; then
+			if [ "$appid_file" = "$DECK_APPID" ]; then
+				ok "shortcut runs as app $DECK_APPID (steam_appid.txt beside the binary)"
+			else
+				warn "DECK_APPID=$DECK_APPID but steam_appid.txt beside the binary reads '${appid_file:-missing}' -- the next deploy or --launch registers it"
+			fi
+		else
+			note "no DECK_APPID: the shortcut runs as ${appid_file:+app $appid_file}${appid_file:-its own Non-Steam id} (Steam Input needs the game's app id to read its manifest)"
+		fi
 		local running; running="$(deck "pgrep -f $(sq "$(bin_pattern)") | head -n 1" 2>/dev/null || true)"
 		if [ -n "$running" ]; then note "game is running (pid $running)"; else note "game is not running"; fi
 	else
